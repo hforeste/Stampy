@@ -26,29 +26,36 @@ namespace StampyVmssManagement
         public static async Task ScaleVmss([TimerTrigger("*/30 * * * * *")]TimerInfo myTimer, TraceWriter log)
         {
             _logger = log;
-            //var nDeploymentJobs = await GetNumberOfDeploymentJobs().ConfigureAwait(false);
-            //await ScaleStampyBackend(nDeploymentJobs);
+            var nDeploymentJobs = await GetNumberOfDeploymentJobs().ConfigureAwait(false);
+            await ScaleStampyBackend(nDeploymentJobs);
         }
 
         /// <summary>
-        /// This function will periodacally check the VM to see if it fails to meet certain requirements
+        /// Reset the virtual machine scale set by scaling into zero instances at specifically 2AM PST = 9AM UTC
         /// </summary>
-        /// <param name="myTimer"></param>
+        /// <param name="timer"></param>
         /// <returns></returns>
-        [FunctionName("VmssPolicyEnforcer")]
-        public static async Task ReimageVmss([TimerTrigger("0 0/5 * * * *")]TimerInfo myTimer)
+        [FunctionName("ResetScaleSet")]
+        public static async Task ResetScaleSet([TimerTrigger("0 0 9 * * *")]TimerInfo timer, TraceWriter log)
         {
-            //no op
+            log.Info("Reset virtual machine scale set");
+            using (var httpClient = new CustomHttpClient(log))
+            {
+                var scaleRequest = FormScaleRequest(0);
+                var token = await GetServicePrincipalAccessToken();
+                scaleRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var scaleResponse = await httpClient.SendAsync("UpdateCapacity", scaleRequest);
+            }
         }
 
+        #region Helpers
         private static async Task ScaleStampyBackend(int currentDeploymentRequests)
         {
             using (var httpClient = new CustomHttpClient(_logger))
             {
                 var capacityRequest = FormCapacityStatusRequest();
                 var token = await GetServicePrincipalAccessToken();
-                bool scaleOutIn = false;
-                var sw = new Stopwatch();
+                bool scale = false;
 
                 capacityRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 var response = await httpClient.SendAsync("GetInstanceSummary", capacityRequest);
@@ -63,20 +70,10 @@ namespace StampyVmssManagement
                 {
                     numInstancesResult = currentDeploymentRequests + numBufferMachines;
                     _logger.Info($"Scale out to {numInstancesResult} worker instances");
-                    scaleOutIn = true;
-                }
-                else if (Math.Abs(currentDeploymentRequests - capacityStatus.TotalInstances) > numBufferMachines)
-                {
-                    numInstancesResult = currentDeploymentRequests + numBufferMachines;
-                    _logger.Info($"Scale into {numInstancesResult} worker instances");
-                    scaleOutIn = true;
-                }
-                else
-                {
-                    _logger.Info($"Will not scale. Backend has enough instances");
+                    scale = true;
                 }
 
-                if (scaleOutIn)
+                if (scale)
                 {
                     var scaleRequest = FormScaleRequest(numInstancesResult);
                     scaleRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -85,7 +82,6 @@ namespace StampyVmssManagement
             }
         }
 
-#region Helpers
         private static HttpRequestMessage FormCapacityStatusRequest()
         {
             string requestUri = $"https://management.azure.com/subscriptions/{SubscriptionId}/resourceGroups/{ResourceGroup}/providers/Microsoft.Compute/VirtualMachineScaleSets/{VmScaleSetName}/instanceView?api-version=2017-03-30";
