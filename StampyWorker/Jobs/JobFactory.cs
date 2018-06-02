@@ -18,6 +18,9 @@ namespace StampyWorker
             {
                 case StampyJobType.None:
                     break;
+                case StampyJobType.CreateService:
+                    job = new ServiceCreationJob(logger, args);
+                    break;
                 case StampyJobType.Build:
                     break;
                 case StampyJobType.Deploy:
