@@ -7,7 +7,6 @@
 
         public JobResult()
         {
-            Status = StampyCommon.Models.JobResult.None;
             Message = "";
         }
     }

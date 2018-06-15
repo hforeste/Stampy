@@ -86,6 +86,7 @@ namespace StampyWorker
                     jobException = ex;
                     jobResult = new JobResult { Status = StampyCommon.Models.JobResult.Failed };
                     eventsLogger.WriteError(queueItem, "Error while running job", ex);
+                    throw;
                 }
                 finally
                 {

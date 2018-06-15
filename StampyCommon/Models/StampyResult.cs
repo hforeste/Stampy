@@ -19,6 +19,6 @@ namespace StampyCommon.Models
 
     public enum JobResult
     {
-        None, Cancelled, Failed, Passed, InProgress
+        Cancelled, Failed, Passed, InProgress
     }
 }
