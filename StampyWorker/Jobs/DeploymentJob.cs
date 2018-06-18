@@ -71,6 +71,9 @@ namespace StampyWorker.Jobs
                 if (e.Data.Contains("Total Time for Template"))
                 {
                     _result.Status = StampyCommon.Models.JobResult.Passed;
+                }else if(e.Data.Contains("Total Time wasted"))
+                {
+                    _result.Status = StampyCommon.Models.JobResult.Failed;
                 }
             }
         }
