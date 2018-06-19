@@ -44,23 +44,56 @@ namespace StampyWorker
 
         [FunctionName("ServiceCreator")]
         [return: Queue("deployment-jobs")]
-        public static async Task<CloudStampyParameters> CreateCloudService([QueueTrigger("service-creation-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
+        public static async Task CreateCloudService([QueueTrigger("service-creation-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request, [Queue("deployment-jobs")]ICollector<CloudStampyParameters> deploymentJobsQueue)
         {
-            var result = await ExecuteJob(request);
+            var result = (await ExecuteJob(request)).Result;
 
-            var deploymentJobParameters = new CloudStampyParameters
+            if (result == StampyCommon.Models.JobResult.Passed)
             {
-                RequestId = request.RequestId,
-                JobId = Guid.NewGuid().ToString(),
-                BuildPath = request.BuildPath,
-                CloudName = request.CloudName,
-                DeploymentTemplate = request.DeploymentTemplate,
-                //if someone wants to deploy to this created service then add request to deployment-jobs queue
-                JobType = (request.JobType & StampyJobType.Deploy) == StampyJobType.Deploy ? StampyJobType.Deploy : StampyJobType.None,
-                TestCategories = request.TestCategories
-            };
+                if ((request.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
+                {
+                    //ServiceCreator creates the service using SetupPrivateStampWithGeo which essentially creates two cloud services. So enqueue a job to deploy to stamp and geomaster
+                    var geomasterJob = new CloudStampyParameters
+                    {
+                        RequestId = request.RequestId,
+                        JobId = Guid.NewGuid().ToString(),
+                        BuildPath = request.BuildPath,
+                        CloudName = $"{request.CloudName}geo",
+                        DeploymentTemplate = "GeoMaster_StompDeploy.xml",
+                        JobType = request.JobType,
+                        TestCategories = request.TestCategories
+                    };
 
-            return deploymentJobParameters;
+                    var stampJob = new CloudStampyParameters
+                    {
+                        RequestId = request.RequestId,
+                        JobId = Guid.NewGuid().ToString(),
+                        BuildPath = request.BuildPath,
+                        CloudName = $"{request.CloudName}",
+                        DeploymentTemplate = "Antares_StompDeploy.xml",
+                        JobType = request.JobType,
+                        TestCategories = request.TestCategories
+                    };
+
+                    deploymentJobsQueue.Add(geomasterJob);
+                    deploymentJobsQueue.Add(stampJob);
+                }
+                else
+                {
+                    //This is the case where we created a service but the end-user did not want to deploy to the service. We still need to create an empty job to continue the flow of functions.
+                    var emptyJob = new CloudStampyParameters
+                    {
+                        RequestId = request.RequestId,
+                        JobId = Guid.NewGuid().ToString(),
+                        BuildPath = request.BuildPath,
+                        CloudName = request.CloudName,
+                        JobType = request.JobType,
+                        TestCategories = request.TestCategories
+                    };
+
+                    deploymentJobsQueue.Add(emptyJob);
+                }
+            }
         }
 
         private static async Task<StampyResult> ExecuteJob(CloudStampyParameters queueItem)
