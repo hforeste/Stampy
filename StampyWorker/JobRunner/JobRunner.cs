@@ -96,6 +96,25 @@ namespace StampyWorker
             }
         }
 
+        /// <summary>
+        /// A proxy function to the OnPrem Build Agents
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        [FunctionName("BuildChanges")]
+        [return: Queue("service-creation-jobs")]
+        public static async Task BuildChanges([QueueTrigger("build-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
+        {
+            throw new NotImplementedException();
+        }
+
+        [FunctionName("TestBuild")]
+        [return: Queue("stampy-jobs-finished")]
+        public static async Task TestBuild([QueueTrigger("test-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
+        {
+            throw new NotImplementedException();
+        }
+
         private static async Task<StampyResult> ExecuteJob(CloudStampyParameters queueItem)
         {
             StampyResult result = null;
