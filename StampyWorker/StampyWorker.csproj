@@ -11,6 +11,12 @@
     <ProjectReference Include="..\StampyCommon\StampyCommon.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="AutomationUnit.Client">
+      <HintPath>..\..\..\StampySourceCodeAndMissingDLLS\StampyMissingDlls\AutomationUnit.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="AutomationUnit.DataModel">
+      <HintPath>..\..\..\StampySourceCodeAndMissingDLLS\StampyMissingDlls\AutomationUnit.DataModel.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
@@ -21,8 +27,5 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Utilities\" />
   </ItemGroup>
 </Project>

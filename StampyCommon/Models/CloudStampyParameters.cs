@@ -32,6 +32,23 @@ namespace StampyCommon
             return s;
         }
 
+        public CloudStampyParameters Copy()
+        {
+            var tmp = new CloudStampyParameters
+            {
+                BuildPath = this.BuildPath,
+                CloudName = this.CloudName,
+                DeploymentTemplate = this.DeploymentTemplate,
+                DpkPath = this.DpkPath,
+                JobId = this.JobId,
+                JobType = this.JobType,
+                RequestId = this.RequestId,
+                TestCategories = this.TestCategories
+            };
+
+            return tmp;
+        }
+
         public string ToJsonString()
         {
             return JsonConvert.SerializeObject(this);

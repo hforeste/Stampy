@@ -22,6 +22,7 @@ namespace StampyWorker
                     job = new ServiceCreationJob(logger, args);
                     break;
                 case StampyJobType.Build:
+                    job = new BuildJob(logger, args);
                     break;
                 case StampyJobType.Deploy:
                     job = new DeploymentJob(logger, args);

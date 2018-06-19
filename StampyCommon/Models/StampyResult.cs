@@ -15,6 +15,7 @@ namespace StampyCommon.Models
         public string CloudName { get; set; }
         public JobResult Result { get; set; }
         public string StatusMessage { get; set; }
+        public Dictionary<string, object> JobResultDetails { get; set; }
     }
 
     public enum JobResult

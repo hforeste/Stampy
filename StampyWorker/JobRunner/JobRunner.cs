@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
 using StampyCommon;
 using StampyCommon.Loggers;
 using StampyCommon.Models;
@@ -43,15 +42,17 @@ namespace StampyWorker
         }
 
         [FunctionName("ServiceCreator")]
-        [return: Queue("deployment-jobs")]
         public static async Task CreateCloudService([QueueTrigger("service-creation-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request, [Queue("deployment-jobs")]ICollector<CloudStampyParameters> deploymentJobsQueue)
         {
-            var result = (await ExecuteJob(request)).Result;
+            StampyCommon.Models.JobResult result;
 
-            if (result == StampyCommon.Models.JobResult.Passed)
+            if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService)
             {
-                if ((request.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
+                result = (await ExecuteJob(request)).Result;
+                if (result == StampyCommon.Models.JobResult.Passed)
                 {
+                    //TODO check the deployment template set in the parameters. Use that to determine what kind of service to create
+
                     //ServiceCreator creates the service using SetupPrivateStampWithGeo which essentially creates two cloud services. So enqueue a job to deploy to stamp and geomaster
                     var geomasterJob = new CloudStampyParameters
                     {
@@ -78,21 +79,22 @@ namespace StampyWorker
                     deploymentJobsQueue.Add(geomasterJob);
                     deploymentJobsQueue.Add(stampJob);
                 }
-                else
+            }
+            else
+            {
+                var p = new CloudStampyParameters
                 {
-                    //This is the case where we created a service but the end-user did not want to deploy to the service. We still need to create an empty job to continue the flow of functions.
-                    var emptyJob = new CloudStampyParameters
-                    {
-                        RequestId = request.RequestId,
-                        JobId = Guid.NewGuid().ToString(),
-                        BuildPath = request.BuildPath,
-                        CloudName = request.CloudName,
-                        JobType = request.JobType,
-                        TestCategories = request.TestCategories
-                    };
+                    RequestId = request.RequestId,
+                    JobId = Guid.NewGuid().ToString(),
+                    BuildPath = request.BuildPath,
+                    CloudName = request.CloudName,
+                    JobType = request.JobType,
+                    TestCategories = request.TestCategories,
+                    DeploymentTemplate = request.DeploymentTemplate,
+                    DpkPath = request.DpkPath
+                };
 
-                    deploymentJobsQueue.Add(emptyJob);
-                }
+                deploymentJobsQueue.Add(p);
             }
         }
 
@@ -103,9 +105,26 @@ namespace StampyWorker
         /// <returns></returns>
         [FunctionName("BuildChanges")]
         [return: Queue("service-creation-jobs")]
-        public static async Task BuildChanges([QueueTrigger("build-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
+        public static async Task<CloudStampyParameters> BuildChanges([QueueTrigger("build-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
         {
-            throw new NotImplementedException();
+            var serviceCreationJob = request.Copy();
+
+            if ((request.JobType & StampyJobType.Build) == StampyJobType.Build)
+            {
+                var result = await ExecuteJob(request);
+
+                if (result.JobResultDetails.TryGetValue("Build Share", out object val))
+                {
+                    serviceCreationJob.BuildPath = (string)val;
+                }
+                else
+                {
+                    eventsLogger.WriteError("Build Share is empty");
+                }
+            }
+
+            serviceCreationJob.JobId = Guid.NewGuid().ToString();
+            return serviceCreationJob;
         }
 
         [FunctionName("TestBuild")]
@@ -150,7 +169,8 @@ namespace StampyWorker
                         JobId = queueItem.JobId,
                         RequestId = queueItem.RequestId,
                         Result = jobResult.Status,
-                        StatusMessage = jobResult.Message
+                        StatusMessage = jobResult.Message,
+                        JobResultDetails = jobResult.ResultDetails
                     };
 
                     resultsLogger.WriteResult(queueItem, jobResult.Status.ToString(), (int)sw.Elapsed.TotalMinutes, jobException);
