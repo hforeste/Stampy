@@ -7,20 +7,18 @@ using System.Threading.Tasks;
 
 namespace StampyCommon.Loggers
 {
-    public class CsvFileLogger : ITableLogger, IDisposable
+    internal class CsvFileLogger : ITableLogger, IDisposable
     {
         private StreamWriter _fileStreamWriter;
         private List<KustoColumnMapping> _schema;
-        private string _fileName;
+        private string _filePath;
         private bool _isColumnsWritten;
 
         public CsvFileLogger(string fileName, List<KustoColumnMapping> schema)
         {
-            _fileName = fileName;
             _schema = schema;
-
-            var filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
-            _fileStreamWriter = new StreamWriter(File.Open(filePath, FileMode.Append, FileAccess.ReadWrite, FileShare.Read));
+            _filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+            _fileStreamWriter = new StreamWriter(File.Open(_filePath, FileMode.Append, FileAccess.Write, FileShare.Read));
             _fileStreamWriter.AutoFlush = true;
         }
 
@@ -33,8 +31,17 @@ namespace StampyCommon.Loggers
         {
             if (!_isColumnsWritten)
             {
+                //check if the columns exist already
                 var line = string.Join(",", _schema.Select(c => c.ColumnName));
-                await _fileStreamWriter.WriteLineAsync(line);
+
+                using (var reader = new StreamReader(File.Open(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read)))
+                {
+                    var columnLine = await reader.ReadLineAsync();
+                    if (!columnLine.Equals(line, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        await _fileStreamWriter.WriteLineAsync(line);
+                    }
+                }
                 _isColumnsWritten = true;
             }
 
