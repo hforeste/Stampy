@@ -10,11 +10,11 @@ namespace StampyWorker
 {
     internal class JobFactory
     {
-        public static IJob GetJob(ICloudStampyLogger logger, CloudStampyParameters args)
+        public static IJob GetJob(ICloudStampyLogger logger, CloudStampyParameters args, StampyJobType requestedJobType)
         {
             IJob job = null;
 
-            switch (args.JobType)
+            switch (requestedJobType)
             {
                 case StampyJobType.None:
                     break;

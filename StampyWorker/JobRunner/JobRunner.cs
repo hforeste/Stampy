@@ -14,8 +14,8 @@ namespace StampyWorker
         static StampyResultsLogger resultsLogger;
         static JobRunner()
         {
-            eventsLogger = new StampyWorkerEventsKustoLogger(new KustoLoggingConfiguration());
-            resultsLogger = new StampyResultsLogger(new KustoLoggingConfiguration());
+            eventsLogger = new StampyWorkerEventsKustoLogger(new LoggingConfiguration());
+            resultsLogger = new StampyResultsLogger(new LoggingConfiguration());
         }
 
         [FunctionName("DeploymentCreator")]
@@ -24,7 +24,7 @@ namespace StampyWorker
         {
             if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
             {
-                return await ExecuteJob(myQueueItem);
+                return await ExecuteJob(myQueueItem, StampyJobType.Deploy);
             }
 
             var result = new StampyResult()
@@ -48,7 +48,7 @@ namespace StampyWorker
 
             if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService)
             {
-                result = (await ExecuteJob(request)).Result;
+                result = (await ExecuteJob(request, StampyJobType.CreateService)).Result;
                 if (result == StampyCommon.Models.JobResult.Passed)
                 {
                     //TODO check the deployment template set in the parameters. Use that to determine what kind of service to create
@@ -111,7 +111,7 @@ namespace StampyWorker
 
             if ((request.JobType & StampyJobType.Build) == StampyJobType.Build)
             {
-                var result = await ExecuteJob(request);
+                var result = await ExecuteJob(request, StampyJobType.Build);
 
                 if (result.JobResultDetails.TryGetValue("Build Share", out object val))
                 {
@@ -134,14 +134,14 @@ namespace StampyWorker
             throw new NotImplementedException();
         }
 
-        private static async Task<StampyResult> ExecuteJob(CloudStampyParameters queueItem)
+        private static async Task<StampyResult> ExecuteJob(CloudStampyParameters queueItem, StampyJobType requestedJobType)
         {
             StampyResult result = null;
             JobResult jobResult = null;
             Exception jobException = null;
 
             var sw = new Stopwatch();
-            var job = JobFactory.GetJob(eventsLogger, queueItem);
+            var job = JobFactory.GetJob(eventsLogger, queueItem, requestedJobType);
 
             if (job != null)
             {
