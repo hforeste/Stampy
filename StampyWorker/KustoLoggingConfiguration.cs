@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace StampyWorker
 {
-    internal class KustoLoggingConfiguration : IConfiguration
+    internal class LoggingConfiguration : IConfiguration
     {
         public string StorageAccountConnectionString => throw new NotImplementedException();
 
@@ -20,5 +20,7 @@ namespace StampyWorker
         public string KustoClientId => Environment.GetEnvironmentVariable("KustoClientId");
 
         public string KustoClientSecret => Environment.GetEnvironmentVariable("KustoSecret");
+
+        public bool IsProduction => string.Equals(Environment.GetEnvironmentVariable("USERNAME"), "awtester", StringComparison.CurrentCultureIgnoreCase);
     }
 }

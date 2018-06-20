@@ -11,5 +11,6 @@
         string StampyJobResultsFileShareName { get; }
         string KustoClientId { get; }
         string KustoClientSecret { get; }
+        bool IsProduction { get; }
     }
 }

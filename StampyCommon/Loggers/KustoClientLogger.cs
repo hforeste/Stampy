@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace StampyCommon.Loggers
 {
-    internal class KustoClientLogger : ITableLogger
+    internal class KustoClientLogger : ITableLogger, IDisposable
     {
         private IKustoIngestClient _kustoClient;
         private KustoIngestionProperties _kustoProperties;
@@ -54,6 +54,11 @@ namespace StampyCommon.Loggers
             writer.Flush();
             stream.Position = 0;
             return stream;
+        }
+
+        public void Dispose()
+        {
+            _kustoClient.Dispose();
         }
     }
 }

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace StampyCommon.Loggers
 {
-    public class StampyResultsLogger : KustoLogger, IStampyResultsLogger
+    public class StampyResultsLogger : Logger, IStampyResultsLogger
     {
         private List<KustoColumnMapping> _mappings;
         public StampyResultsLogger(IConfiguration configuration) : base(configuration, "StampyResults")

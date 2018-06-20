@@ -5,7 +5,7 @@ using System.Net.Sockets;
 
 namespace StampyCommon.Loggers
 {
-    public class StampyWorkerEventsKustoLogger : KustoLogger, ICloudStampyLogger
+    public class StampyWorkerEventsKustoLogger : Logger, ICloudStampyLogger
     {
         private string _workerIpAddress;
         private List<KustoColumnMapping> _mappings;
