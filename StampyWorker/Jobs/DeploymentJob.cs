@@ -28,14 +28,14 @@ namespace StampyWorker.Jobs
         public Task<JobResult> Execute()
         {
 
-            if (!AvailableDeploymentTemplates.Contains(_parameters.DeploymentTemplate))
+            if (!AvailableDeploymentTemplates.Any(d => d.Equals(_parameters.DeploymentTemplate, StringComparison.CurrentCultureIgnoreCase)))
             {
-                _logger.WriteInfo(_parameters, $"Deployment template `{_parameters.DeploymentTemplate}` does not exist");
+                throw new ArgumentException("Deployment Template does not exist");
             }
 
             if (!File.Exists(DeployConsolePath))
             {
-                _logger.WriteInfo(_parameters, $"Cannot find {DeployConsolePath}");
+                throw new FileNotFoundException($"Cannot find {DeployConsolePath}");
             }
 
             _logger.WriteInfo(_parameters, "Starting deployment...");
