@@ -93,8 +93,11 @@
     <Compile Include="Interfaces\IStampyClientLogger.cs" />
     <Compile Include="Interfaces\IStampyContext.cs" />
     <Compile Include="Interfaces\IStampyResultsLogger.cs" />
+    <Compile Include="Loggers\CsvFileLogger.cs" />
     <Compile Include="Loggers\FileLogger.cs" />
-    <Compile Include="Loggers\KustoLogger.cs" />
+    <Compile Include="Loggers\ITableLogger.cs" />
+    <Compile Include="Loggers\KustoClientLogger.cs" />
+    <Compile Include="Loggers\Logger.cs" />
     <Compile Include="Loggers\StampyClientRequestLogger.cs" />
     <Compile Include="Loggers\StampyFrontEndEventsKustoLogger.cs" />
     <Compile Include="Loggers\StampyResultsLogger.cs" />
