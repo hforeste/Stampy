@@ -9,6 +9,7 @@ namespace StampyCommon
         Build = 1,
         Deploy = 2,
         Test = 4,
-        CreateService = 8
+        CreateService = 8,
+        RemoveResources = 16
     }
 }

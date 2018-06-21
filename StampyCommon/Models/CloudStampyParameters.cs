@@ -13,6 +13,7 @@ namespace StampyCommon
         public string DeploymentTemplate { get; set; }
         public string CloudName { get; set; }
         public List<string> TestCategories { get; set; }
+        public string ExpiryDate { get; set; } 
         internal string HostingPath
         {
             get

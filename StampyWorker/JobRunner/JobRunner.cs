@@ -1,7 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Queue;
+using Newtonsoft.Json;
 using StampyCommon;
 using StampyCommon.Loggers;
 using StampyCommon.Models;
@@ -19,7 +24,7 @@ namespace StampyWorker
         }
 
         [FunctionName("DeploymentCreator")]
-        [return: Queue("stampy-jobs-finished")]
+        [return: Queue("test-jobs")]
         public static async Task<StampyResult> DeployToCloudService([QueueTrigger("deployment-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters myQueueItem)
         {
             if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
@@ -129,9 +134,53 @@ namespace StampyWorker
 
         [FunctionName("TestBuild")]
         [return: Queue("stampy-jobs-finished")]
-        public static async Task TestBuild([QueueTrigger("test-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
+        public static async Task<CloudStampyParameters> TestBuild([QueueTrigger("test-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
         {
-            throw new NotImplementedException();
+            var finishedJob = request.Copy();
+            finishedJob.JobId = Guid.NewGuid().ToString();
+            if ((finishedJob.JobType & StampyJobType.RemoveResources) == StampyJobType.RemoveResources)
+            {
+                finishedJob.JobType = finishedJob.JobType | StampyJobType.RemoveResources;
+            }
+            finishedJob.ExpiryDate = DateTime.UtcNow.AddHours(1).ToString();
+            return finishedJob;
+        }
+
+        [FunctionName("ResourceCleaner")]
+        public static async Task RemoveResources([TimerTrigger("0 */10 * * * *")]TimerInfo timer)
+        {
+            var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
+            var queueClient = storageAccount.CreateCloudQueueClient();
+            var queue = queueClient.GetQueueReference("stampy-jobs-finished");
+            List<CloudQueueMessage> messages = new List<CloudQueueMessage>();
+
+            int? messageCount;
+            int tries = 0;
+            do
+            {
+                await queue.FetchAttributesAsync();
+                messageCount = queue.ApproximateMessageCount;
+                var queueMessages = await queue.GetMessagesAsync(32);
+                foreach (var message in queueMessages)
+                {
+                    if (!messages.Any(m => m.Id == message.Id))
+                    {
+                        messages.Add(message);
+                    }
+                }
+                
+                tries++;
+            } while (messageCount.HasValue && messages.Count < messageCount.GetValueOrDefault() && tries < 3);
+
+            foreach (var message in messages)
+            {
+                var stampyJob = JsonConvert.DeserializeObject<CloudStampyParameters>(message.AsString);
+                if (DateTime.Parse(stampyJob.ExpiryDate) >= DateTime.UtcNow)
+                {
+                    //await queue.DeleteMessageAsync(message);
+                    //TODO delete resources
+                }
+            }
         }
 
         private static async Task<StampyResult> ExecuteJob(CloudStampyParameters queueItem, StampyJobType requestedJobType)
