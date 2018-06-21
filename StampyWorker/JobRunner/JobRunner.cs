@@ -25,25 +25,20 @@ namespace StampyWorker
 
         [FunctionName("DeploymentCreator")]
         [return: Queue("test-jobs")]
-        public static async Task<StampyResult> DeployToCloudService([QueueTrigger("deployment-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters myQueueItem)
+        public static async Task<CloudStampyParameters> DeployToCloudService([QueueTrigger("deployment-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters myQueueItem)
         {
             if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
             {
-                return await ExecuteJob(myQueueItem, StampyJobType.Deploy);
+                var stampyResult = await ExecuteJob(myQueueItem, StampyJobType.Deploy);
+                if (stampyResult.Result != StampyCommon.Models.JobResult.Passed)
+                {
+                    throw new Exception($"Failed to deploy to {myQueueItem.CloudName}");
+                }
             }
 
-            var result = new StampyResult()
-            {
-                BuildPath = myQueueItem.BuildPath,
-                CloudName = myQueueItem.CloudName,
-                DeploymentTemplate = myQueueItem.DeploymentTemplate,
-                JobId = myQueueItem.JobId,
-                RequestId = myQueueItem.RequestId,
-                Result = StampyCommon.Models.JobResult.Passed,
-                StatusMessage = "Skipped deployment"
-            };
-
-            return result;
+            var nextJob = myQueueItem.Copy();
+            nextJob.JobId = Guid.NewGuid().ToString();
+            return nextJob;
         }
 
         [FunctionName("ServiceCreator")]
