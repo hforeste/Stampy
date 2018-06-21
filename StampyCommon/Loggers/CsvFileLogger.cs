@@ -10,6 +10,7 @@ namespace StampyCommon.Loggers
     internal class CsvFileLogger : ITableLogger, IDisposable
     {
         private StreamWriter _fileStreamWriter;
+        private StreamReader _fileStreamReader;
         private List<KustoColumnMapping> _schema;
         private string _filePath;
         private bool _isColumnsWritten;
@@ -17,35 +18,38 @@ namespace StampyCommon.Loggers
         public CsvFileLogger(string fileName, List<KustoColumnMapping> schema)
         {
             _schema = schema;
-            _filePath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
-            _fileStreamWriter = new StreamWriter(File.Open(_filePath, FileMode.Append, FileAccess.Write, FileShare.Read));
-            _fileStreamWriter.AutoFlush = true;
+            _filePath = Path.Combine(Directory.GetCurrentDirectory(), $"{fileName}.csv");
+            var stream = File.Open(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+            _fileStreamWriter = new StreamWriter(stream);
+            _fileStreamReader = new StreamReader(stream);
         }
 
         public void Dispose()
         {
             _fileStreamWriter.Dispose();
+            _fileStreamReader.Dispose();
         }
 
-        public async Task WriteRow(string message)
+        public Task WriteRow(string message)
         {
             if (!_isColumnsWritten)
             {
                 //check if the columns exist already
                 var line = string.Join(",", _schema.Select(c => c.ColumnName));
 
-                using (var reader = new StreamReader(File.Open(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read)))
+                var columnLine = _fileStreamReader.ReadLine();
+                if (!string.Equals(columnLine, line, StringComparison.CurrentCultureIgnoreCase))
                 {
-                    var columnLine = await reader.ReadLineAsync();
-                    if (!columnLine.Equals(line, StringComparison.CurrentCultureIgnoreCase))
-                    {
-                        await _fileStreamWriter.WriteLineAsync(line);
-                    }
+                    _fileStreamWriter.WriteLine(line);
+                    _fileStreamWriter.Flush();
                 }
+
                 _isColumnsWritten = true;
             }
+            _fileStreamWriter.WriteLine(message);
+            _fileStreamWriter.Flush();
 
-            await _fileStreamWriter.WriteLineAsync(message);
+            return Task.FromResult(new object());
         }
     }
 }

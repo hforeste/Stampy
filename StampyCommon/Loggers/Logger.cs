@@ -30,7 +30,7 @@ namespace StampyCommon.Loggers
                     }
                     else
                     {
-                        _logger = new CsvFileLogger(GetType().ToString(), KustoColumnMappings);
+                        _logger = new CsvFileLogger(_tableName, KustoColumnMappings);
                     }
                 }
 
