@@ -49,6 +49,7 @@ namespace StampyWorker.Utilities
                     {
                         await Task.Delay(TimeSpan.FromMinutes(1));
 
+                        _logger.WriteInfo(_args, "Get build status from agent machines");
                         var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
 
                         switch (tmp.State)
@@ -67,13 +68,19 @@ namespace StampyWorker.Utilities
                                 break;
                         }
 
-                        string xmlResult = labMachineClient.GetResult(labMachineJob.Id);
-                        var doc = new XmlDocument();
-                        doc.LoadXml(xmlResult);
-                        XmlNodeList bss = doc.GetElementsByTagName("BuildPath");
-                        string buildShare = bss[0].InnerText;
+                        //when the job is done, get the new build path
+                        if (result.JobStatus != default(Status))
+                        {
+                            _logger.WriteInfo(_args, "Getting build path from agent machines");
+                            string xmlResult = labMachineClient.GetResult(labMachineJob.Id);
+                            var doc = new XmlDocument();
+                            doc.LoadXml(xmlResult);
+                            XmlNodeList bss = doc.GetElementsByTagName("BuildPath");
+                            string buildShare = bss[0].InnerText;
 
-                        result.ResultDetails.Add("Build Share", buildShare);
+                            result.ResultDetails.Add("Build Share", buildShare);
+                            return result;
+                        }
                     }
 
                     _logger.WriteInfo(_args, "Waiting for build task timed out");
