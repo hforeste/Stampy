@@ -12,6 +12,7 @@ namespace StampyWorker
 
         public JobResult()
         {
+            ResultDetails = new Dictionary<string, object>();
             Message = "";
         }
     }
