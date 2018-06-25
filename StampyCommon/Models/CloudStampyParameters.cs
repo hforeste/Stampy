@@ -47,7 +47,8 @@ namespace StampyCommon
                 JobType = this.JobType,
                 RequestId = this.RequestId,
                 TestCategories = this.TestCategories,
-                ExpiryDate = this.ExpiryDate
+                ExpiryDate = this.ExpiryDate,
+                FlowStatus = this.FlowStatus
             };
 
             return tmp;

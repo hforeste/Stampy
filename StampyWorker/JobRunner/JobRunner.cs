@@ -62,7 +62,7 @@ namespace StampyWorker
                         DeploymentTemplate = "GeoMaster_StompDeploy.xml",
                         JobType = request.JobType,
                         TestCategories = request.TestCategories,
-                        FlowStatus = result.JobStatus
+                        FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : result.JobStatus
                     };
 
                     var stampJob = new CloudStampyParameters
@@ -74,7 +74,7 @@ namespace StampyWorker
                         DeploymentTemplate = "Antares_StompDeploy.xml",
                         JobType = request.JobType,
                         TestCategories = request.TestCategories,
-                        FlowStatus = result.JobStatus
+                        FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : result.JobStatus
                     };
 
                     deploymentJobsQueue.Add(geomasterJob);
@@ -83,18 +83,8 @@ namespace StampyWorker
             }
             else
             {
-                var p = new CloudStampyParameters
-                {
-                    RequestId = request.RequestId,
-                    JobId = Guid.NewGuid().ToString(),
-                    BuildPath = request.BuildPath,
-                    CloudName = request.CloudName,
-                    JobType = request.JobType,
-                    TestCategories = request.TestCategories,
-                    DeploymentTemplate = request.DeploymentTemplate,
-                    DpkPath = request.DpkPath
-                };
-
+                var p = request.Copy();
+                p.JobId = Guid.NewGuid().ToString();
                 deploymentJobsQueue.Add(p);
             }
         }
@@ -122,8 +112,9 @@ namespace StampyWorker
                 {
                     eventsLogger.WriteError("Build Share is empty");
                 }
-            }
 
+                serviceCreationJob.FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : result.JobStatus;
+            }
             serviceCreationJob.JobId = Guid.NewGuid().ToString();
             return serviceCreationJob;
         }
@@ -134,7 +125,7 @@ namespace StampyWorker
         {
             var finishedJob = request.Copy();
             finishedJob.JobId = Guid.NewGuid().ToString();
-            if ((finishedJob.JobType & StampyJobType.RemoveResources) == StampyJobType.RemoveResources)
+            if ((finishedJob.JobType & StampyJobType.RemoveResources) != StampyJobType.RemoveResources)
             {
                 finishedJob.JobType = finishedJob.JobType | StampyJobType.RemoveResources;
             }
