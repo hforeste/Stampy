@@ -25,8 +25,10 @@ namespace StampyWorker.Jobs
 
         public async Task<JobResult> ExecuteTestsAsync(string[] tests)
         {
+            string labMachineAddress;
             var result = new JobResult();
-            var labMachineClient = JobClient.Link(@"http://stampy.lab.redant.selfhost.corp.microsoft.com:8090/api");
+
+            //TODO iterate over categories and send job to lab machines
 
             var labAgentParameters = new Dictionary<string, string>
             {
@@ -36,6 +38,8 @@ namespace StampyWorker.Jobs
                 { "TestCommonConfig", $@"\\AntaresDeployment\PublicLockBox\{_args.CloudName}\TestCommon.dll.config"},
                 { "TestConfigName", $"{_args.CloudName}geo"}
             };
+
+            var labMachineClient = JobClient.Link(@"http://stampy.lab.redant.selfhost.corp.microsoft.com:8090/api");
 
             var jobAsyncTask = Task.Run(() => labMachineClient.Create(labAgentParameters));
 
