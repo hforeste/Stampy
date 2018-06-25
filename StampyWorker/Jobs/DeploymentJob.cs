@@ -1,4 +1,5 @@
 ﻿using StampyCommon;
+using StampyCommon.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -60,7 +61,7 @@ namespace StampyWorker.Jobs
             }
 
             _logger.WriteInfo(_parameters, "Finished deployment...");
-
+            _result.Message = _statusMessageBuilder.ToString();
             return Task.FromResult(_result);
         }
 
@@ -70,10 +71,10 @@ namespace StampyWorker.Jobs
             {
                 if (e.Data.Contains("Total Time for Template"))
                 {
-                    _result.Status = StampyCommon.Models.JobResult.Passed;
+                    _result.JobStatus = Status.Passed;
                 }else if(e.Data.Contains("Total Time wasted"))
                 {
-                    _result.Status = StampyCommon.Models.JobResult.Failed;
+                    _result.JobStatus = Status.Failed;
                 }
             }
         }
@@ -83,7 +84,7 @@ namespace StampyWorker.Jobs
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 _statusMessageBuilder.AppendLine(e.Data);
-                _result.Status = StampyCommon.Models.JobResult.Failed;
+                _result.JobStatus = Status.Failed;
             }
         }
 

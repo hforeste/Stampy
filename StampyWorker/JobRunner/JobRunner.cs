@@ -27,16 +27,15 @@ namespace StampyWorker
         [return: Queue("test-jobs")]
         public static async Task<CloudStampyParameters> DeployToCloudService([QueueTrigger("deployment-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters myQueueItem)
         {
+            var nextJob = myQueueItem.Copy();
+
             if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
             {
-                var stampyResult = await ExecuteJob(myQueueItem, StampyJobType.Deploy);
-                if (stampyResult.Result != StampyCommon.Models.JobResult.Passed)
-                {
-                    throw new Exception($"Failed to deploy to {myQueueItem.CloudName}");
-                }
+
+                var jobResult = await ExecuteJob(myQueueItem, StampyJobType.Deploy);
+                nextJob.FlowStatus = jobResult.JobStatus == Status.Passed ? Status.InProgress : jobResult.JobStatus;
             }
 
-            var nextJob = myQueueItem.Copy();
             nextJob.JobId = Guid.NewGuid().ToString();
             return nextJob;
         }
@@ -44,12 +43,12 @@ namespace StampyWorker
         [FunctionName("ServiceCreator")]
         public static async Task CreateCloudService([QueueTrigger("service-creation-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request, [Queue("deployment-jobs")]ICollector<CloudStampyParameters> deploymentJobsQueue)
         {
-            StampyCommon.Models.JobResult result;
+            JobResult result;
 
             if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService)
             {
-                result = (await ExecuteJob(request, StampyJobType.CreateService)).Result;
-                if (result == StampyCommon.Models.JobResult.Passed)
+                result = await ExecuteJob(request, StampyJobType.CreateService);
+                if (result.JobStatus == Status.Passed)
                 {
                     //TODO check the deployment template set in the parameters. Use that to determine what kind of service to create
 
@@ -62,7 +61,8 @@ namespace StampyWorker
                         CloudName = $"{request.CloudName}geo",
                         DeploymentTemplate = "GeoMaster_StompDeploy.xml",
                         JobType = request.JobType,
-                        TestCategories = request.TestCategories
+                        TestCategories = request.TestCategories,
+                        FlowStatus = result.JobStatus
                     };
 
                     var stampJob = new CloudStampyParameters
@@ -73,7 +73,8 @@ namespace StampyWorker
                         CloudName = $"{request.CloudName}",
                         DeploymentTemplate = "Antares_StompDeploy.xml",
                         JobType = request.JobType,
-                        TestCategories = request.TestCategories
+                        TestCategories = request.TestCategories,
+                        FlowStatus = result.JobStatus
                     };
 
                     deploymentJobsQueue.Add(geomasterJob);
@@ -113,7 +114,7 @@ namespace StampyWorker
             {
                 var result = await ExecuteJob(request, StampyJobType.Build);
 
-                if (result.JobResultDetails.TryGetValue("Build Share", out object val))
+                if (result.ResultDetails.TryGetValue("Build Share", out object val))
                 {
                     serviceCreationJob.BuildPath = (string)val;
                 }
@@ -178,9 +179,8 @@ namespace StampyWorker
             }
         }
 
-        private static async Task<StampyResult> ExecuteJob(CloudStampyParameters queueItem, StampyJobType requestedJobType)
+        private static async Task<JobResult> ExecuteJob(CloudStampyParameters queueItem, StampyJobType requestedJobType)
         {
-            StampyResult result = null;
             JobResult jobResult = null;
             Exception jobException = null;
 
@@ -199,25 +199,13 @@ namespace StampyWorker
                 catch (Exception ex)
                 {
                     jobException = ex;
-                    jobResult = new JobResult { Status = StampyCommon.Models.JobResult.Failed };
+                    jobResult = new JobResult { JobStatus = Status.Failed };
                     eventsLogger.WriteError(queueItem, "Error while running job", ex);
                     throw;
                 }
                 finally
                 {
-                    result = new StampyResult
-                    {
-                        BuildPath = queueItem.BuildPath,
-                        CloudName = queueItem.CloudName,
-                        DeploymentTemplate = queueItem.DeploymentTemplate,
-                        JobId = queueItem.JobId,
-                        RequestId = queueItem.RequestId,
-                        Result = jobResult.Status,
-                        StatusMessage = jobResult.Message,
-                        JobResultDetails = jobResult.ResultDetails
-                    };
-
-                    resultsLogger.WriteResult(queueItem, jobResult.Status.ToString(), (int)sw.Elapsed.TotalMinutes, jobException);
+                    resultsLogger.WriteResult(queueItem, jobResult.JobStatus.ToString(), (int)sw.Elapsed.TotalMinutes, jobException);
                 }
             }
             else
@@ -225,7 +213,7 @@ namespace StampyWorker
                 eventsLogger.WriteError(queueItem, "Cannot run this job");
             }
 
-            return result;
+            return jobResult;
         }
     }
 }

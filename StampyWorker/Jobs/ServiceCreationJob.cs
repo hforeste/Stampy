@@ -1,4 +1,5 @@
 ﻿using StampyCommon;
+using StampyCommon.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -20,7 +21,6 @@ namespace StampyWorker.Jobs
         {
             _logger = logger;
             _result = new JobResult();
-            _result.Status = StampyCommon.Models.JobResult.None;
             _parameters = cloudStampyArgs;
             _statusMessageBuilder = new StringBuilder();
         }
@@ -54,7 +54,7 @@ namespace StampyWorker.Jobs
             }
 
             _result.Message = _statusMessageBuilder.ToString();
-            _result.Status = StampyCommon.Models.JobResult.Passed;
+            _result.JobStatus = _result.JobStatus == Status.None ? Status.Passed : _result.JobStatus;
             return Task.FromResult(_result);
         }
 
@@ -62,10 +62,11 @@ namespace StampyWorker.Jobs
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                _logger.WriteInfo(_parameters, e.Data);
                 if (e.Data.Contains("<ERROR>") || e.Data.Contains("<Exception>") || e.Data.Contains("Error:"))
                 {
                     _statusMessageBuilder.AppendLine(e.Data);
-                    _result.Status = StampyCommon.Models.JobResult.Failed;
+                    _result.JobStatus = Status.Failed;
                 }
             }
         }
@@ -75,7 +76,7 @@ namespace StampyWorker.Jobs
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 _statusMessageBuilder.AppendLine(e.Data);
-                _result.Status = StampyCommon.Models.JobResult.Failed;
+                _result.JobStatus = Status.Failed;
             }
         }
 

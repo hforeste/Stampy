@@ -1,6 +1,7 @@
 ﻿using AutomationUnit.Client;
 using AutomationUnit.DataModel;
 using StampyCommon;
+using StampyCommon.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -53,14 +54,14 @@ namespace StampyWorker.Utilities
                         switch (tmp.State)
                         {
                             case JobState.Success:
-                                result.Status = StampyCommon.Models.JobResult.Passed;
+                                result.JobStatus = Status.Passed;
                                 break;
                             case JobState.Failed:
-                                result.Status = StampyCommon.Models.JobResult.Failed;
+                                result.JobStatus = Status.Failed;
                                 break;
                             case JobState.Aborting:
                             case JobState.Aborted:
-                                result.Status = StampyCommon.Models.JobResult.Cancelled;
+                                result.JobStatus = Status.Cancelled;
                                 break;
                             default:
                                 break;
@@ -77,7 +78,7 @@ namespace StampyWorker.Utilities
 
                     _logger.WriteInfo(_args, "Waiting for build task timed out");
 
-                    result.Status = StampyCommon.Models.JobResult.Failed;
+                    result.JobStatus = Status.Failed;
                     result.Message = "Waiting for build task timed out";
                 }
                 else
@@ -88,7 +89,7 @@ namespace StampyWorker.Utilities
             catch(Exception ex)
             {
                 _logger.WriteError(_args, "Failed to submit build task to lab machines", ex);
-                result.Status = StampyCommon.Models.JobResult.Failed;
+                result.JobStatus = Status.Failed;
                 result.Message = "Failed to submit build task to lab machines";
             }
 

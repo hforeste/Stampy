@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using StampyCommon.Models;
 using System.Collections.Generic;
 
 namespace StampyCommon
@@ -13,7 +14,8 @@ namespace StampyCommon
         public string DeploymentTemplate { get; set; }
         public string CloudName { get; set; }
         public List<string> TestCategories { get; set; }
-        public string ExpiryDate { get; set; } 
+        public string ExpiryDate { get; set; }
+        public Status FlowStatus { get; set; }
         internal string HostingPath
         {
             get
