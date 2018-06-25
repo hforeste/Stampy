@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.WindowsAzure.Storage;
@@ -24,7 +25,7 @@ namespace StampyWorker
         }
 
         [FunctionName("DeploymentCreator")]
-        [return: Queue("test-jobs")]
+        [return: Queue("test-jobs-staging")]
         public static async Task<CloudStampyParameters> DeployToCloudService([QueueTrigger("deployment-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters myQueueItem)
         {
             var nextJob = myQueueItem.Copy();
@@ -166,6 +167,76 @@ namespace StampyWorker
                 {
                     //await queue.DeleteMessageAsync(message);
                     //TODO delete resources
+                }
+            }
+        }
+
+        [FunctionName("CompositeParameters")]
+        public static async Task ComposeTestBuildParameters([TimerTrigger("0 */1 * * * *")]TimerInfo timer)
+        {
+            var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
+            var queueClient = storageAccount.CreateCloudQueueClient();
+            var stagingQueue = queueClient.GetQueueReference("test-jobs-staging");
+            var testJobsQueue = queueClient.GetQueueReference("test-jobs");
+
+            var jobsPerRequest = new Dictionary<string, List<CloudQueueMessage>>();
+
+            var queueMessages = await stagingQueue.GetMessagesAsync(32, TimeSpan.FromSeconds(10), null, null);
+
+            foreach (var message in queueMessages)
+            {
+                var stampyJob = JsonConvert.DeserializeObject<CloudStampyParameters>(message.AsString);
+
+                List<CloudQueueMessage> csp;
+
+                if (!jobsPerRequest.TryGetValue(stampyJob.RequestId, out csp))
+                {
+                    csp = new List<CloudQueueMessage>
+                        {
+                            message
+                        };
+
+                    jobsPerRequest.Add(stampyJob.RequestId, csp);
+                }
+                else
+                {
+                    csp.Add(message);
+                    jobsPerRequest[stampyJob.RequestId] = csp;
+                }
+
+                //if both geomaster and stamp deployment jobs are done then send a job to the TestBuild function
+                if (csp.Count >= 2)
+                {
+                    var testJobParameters = stampyJob.Copy();
+                    testJobParameters.JobId = Guid.NewGuid().ToString();
+                    testJobParameters.FlowStatus = csp
+                        .Select(deploymentJobQueueMessage => JsonConvert.DeserializeObject<CloudStampyParameters>(deploymentJobQueueMessage.AsString))
+                        .All(deploymentJob => deploymentJob.FlowStatus == Status.InProgress) ? Status.InProgress : Status.Failed;
+
+                    var queueMessageContext = new OperationContext();
+                    var testJobMessage = new CloudQueueMessage(testJobParameters.ToJsonString());
+                    await testJobsQueue.AddMessageAsync(testJobMessage, null, null, null, queueMessageContext);
+
+                    if (queueMessageContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
+                    {
+                        var deleteContext = new OperationContext();
+                        var queueMessageDeletionTasks = new List<Task>();
+                        csp.ForEach(deploymentJobQueueMessage => queueMessageDeletionTasks.Add(stagingQueue.DeleteMessageAsync(deploymentJobQueueMessage, null, deleteContext)));
+
+                        await Task.WhenAll(queueMessageDeletionTasks);
+
+                        foreach (var item in deleteContext.RequestResults)
+                        {
+                            if (item.HttpStatusCode != (int)HttpStatusCode.NoContent)
+                            {
+                                eventsLogger.WriteError($"Failed to delete deployment-job from {stagingQueue.Name}. Storage Status Code: {item.HttpStatusCode}-{item.HttpStatusMessage}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        eventsLogger.WriteError($"Failed to add job to {testJobsQueue.Name}. Storage Status Code: {queueMessageContext.LastResult.HttpStatusCode}-{queueMessageContext.LastResult.HttpStatusMessage}", queueMessageContext.LastResult.Exception);
+                    }
                 }
             }
         }
