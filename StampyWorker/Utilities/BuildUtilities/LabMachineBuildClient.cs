@@ -39,6 +39,7 @@ namespace StampyWorker.Utilities
             try
             {
                 labMachineJob = await jobAsyncTask.ConfigureAwait(false);
+                _logger.WriteInfo(_args, $"Job Type: Build, Job Id: {labMachineJob.Id}, Uri: {labMachineJob.Report}");
                 if (labMachineJob != null)
                 {
                     _logger.WriteInfo(_args, "Waiting for build task...");
