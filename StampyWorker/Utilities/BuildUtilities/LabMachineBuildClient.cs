@@ -51,7 +51,7 @@ namespace StampyWorker.Utilities
 
                         _logger.WriteInfo(_args, "Get build status from agent machines");
                         var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
-
+                        _logger.WriteInfo(_args, $"Agent build job Id: {tmp.Id} Status: {tmp.State} Uri: {tmp.Report}");
                         switch (tmp.State)
                         {
                             case JobState.Success:
