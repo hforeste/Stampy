@@ -11,7 +11,7 @@ namespace StampyWorker.Jobs
     {
         public static ITestClient GetTestClient(ICloudStampyLogger logger, CloudStampyParameters args)
         {
-            return null;
+            return new LabMachineTestClient(logger, args);
         }
     }
 }

@@ -113,7 +113,7 @@ namespace StampyWorker.Jobs
                 { "BuildPath", _args.BuildPath },
                 { "GeomasterDefinitions", $@"\\AntaresDeployment\PublicLockBox\{_args.CloudName}geo\developer.definitions"},
                 { "AzureStampDefinitions", $@"\\AntaresDeployment\PublicLockBox\{_args.CloudName}\developer.definitions"},
-                { "TestCommonConfig", $@"\\AntaresDeployment\PublicLockBox\{_args.CloudName}\TestCommon.dll.config"},
+                { "TestCommonConfig", $@"\\AntaresDeployment\PublicLockBox\{_args.CloudName}geo\TestCommon.dll.config"},
                 { "TestConfigName", $"{_args.CloudName}geo"}
             };
 
