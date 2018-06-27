@@ -28,6 +28,7 @@ namespace StampyWorker
                     job = new DeploymentJob(logger, args);
                     break;
                 case StampyJobType.Test:
+                    job = new TestJob(logger, args);
                     break;
                 default:
                     break;

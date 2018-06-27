@@ -120,18 +120,27 @@ namespace StampyWorker
             return serviceCreationJob;
         }
 
-        [FunctionName("TestBuild")]
+        [FunctionName("TestRunner")]
         [return: Queue("stampy-jobs-finished")]
-        public static async Task<CloudStampyParameters> TestBuild([QueueTrigger("test-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
+        public static async Task<CloudStampyParameters> TestRunner([QueueTrigger("test-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
         {
-            var finishedJob = request.Copy();
-            finishedJob.JobId = Guid.NewGuid().ToString();
-            if ((finishedJob.JobType & StampyJobType.RemoveResources) != StampyJobType.RemoveResources)
+            var job = request.Copy();
+            job.JobId = Guid.NewGuid().ToString();
+
+            if ((request.JobType & StampyJobType.Test) == StampyJobType.Test && request.FlowStatus == Status.InProgress)
             {
-                finishedJob.JobType = finishedJob.JobType | StampyJobType.RemoveResources;
+                if (request.TestCategories.Any())
+                {
+                    var result = await ExecuteJob(request, StampyJobType.Test);
+                    job.FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : Status.Failed;
+                    if ((job.JobType & StampyJobType.RemoveResources) != StampyJobType.RemoveResources)
+                    {
+                        job.JobType = job.JobType | StampyJobType.RemoveResources;
+                    }
+                    job.ExpiryDate = DateTime.UtcNow.AddHours(1).ToString();
+                }
             }
-            finishedJob.ExpiryDate = DateTime.UtcNow.AddHours(1).ToString();
-            return finishedJob;
+            return job;
         }
 
         [FunctionName("ResourceCleaner")]
