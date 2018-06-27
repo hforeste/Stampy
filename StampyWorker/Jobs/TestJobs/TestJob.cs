@@ -53,9 +53,32 @@ namespace StampyWorker.Jobs
             }
 
             var testClient = TestClientFactory.GetTestClient(_logger, _args);
-            jobResult = await testClient.ExecuteTestsAsync(_args.TestCategories.ToArray());
+            var jobResults = new List<JobResult>();
+            
+            foreach (var categoryGroup in _args.TestCategories)
+            {
+                var concurrentTasks = new List<Task<JobResult>>();
 
-            return jobResult;
+                foreach (var category in categoryGroup)
+                {
+                    concurrentTasks.Add(testClient.ExecuteTestAsync(category));
+                }
+
+                await Task.WhenAll(concurrentTasks);
+
+                foreach (var finishedTask in concurrentTasks)
+                {
+                    jobResults.Add(await finishedTask);
+                }
+            }
+
+            var aggregatedJobResult = new JobResult
+            {
+                JobStatus = jobResults.All(j => j.JobStatus == Status.Passed) ? Status.Passed : Status.Failed,
+                Message = string.Join(";", jobResults.Select(j  => j.Message))
+            };
+
+            return aggregatedJobResult;
         }
 
         private bool TryCreateTestConfig(string fileShareLocation)

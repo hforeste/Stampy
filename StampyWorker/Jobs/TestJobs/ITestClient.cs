@@ -8,6 +8,6 @@ namespace StampyWorker.Jobs
 {
     interface ITestClient
     {
-        Task<JobResult> ExecuteTestsAsync(string[] tests);
+        Task<JobResult> ExecuteTestAsync(string test);
     }
 }
