@@ -30,7 +30,7 @@ namespace StampyWorker
         {
             var nextJob = myQueueItem.Copy();
 
-            if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy)
+            if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy && (myQueueItem.FlowStatus == Status.InProgress || myQueueItem.FlowStatus == default(Status)))
             {
 
                 var jobResult = await ExecuteJob(myQueueItem, StampyJobType.Deploy);
@@ -46,7 +46,7 @@ namespace StampyWorker
         {
             JobResult result;
 
-            if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService)
+            if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService && (request.FlowStatus == Status.InProgress || request.FlowStatus == default(Status)))
             {
                 result = await ExecuteJob(request, StampyJobType.CreateService);
                 if (result.JobStatus == Status.Passed)
@@ -127,9 +127,9 @@ namespace StampyWorker
             var job = request.Copy();
             job.JobId = Guid.NewGuid().ToString();
 
-            if ((request.JobType & StampyJobType.Test) == StampyJobType.Test && request.FlowStatus == Status.InProgress)
+            if ((request.JobType & StampyJobType.Test) == StampyJobType.Test && (request.FlowStatus == Status.InProgress || request.FlowStatus == default(Status)))
             {
-                if (request.TestCategories.Any())
+                if (request.TestCategories.Any() && !string.IsNullOrWhiteSpace(request.BuildPath) && !string.IsNullOrWhiteSpace(request.CloudName))
                 {
                     var result = await ExecuteJob(request, StampyJobType.Test);
                     job.FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : Status.Failed;
