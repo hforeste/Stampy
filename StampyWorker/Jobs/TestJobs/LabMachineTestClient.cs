@@ -35,54 +35,53 @@ namespace StampyWorker.Jobs
 
             _logger.WriteInfo(_args, "Submit test task to lab machines");
 
-            Job labMachineJob = null;
+            var labMachineJob = await jobAsyncTask.ConfigureAwait(false);
+            _logger.WriteInfo(_args, $"Job Type: Test, Job Id: {labMachineJob.Id}, Uri: {labMachineJob.Report}");
 
-            try
+            if (labMachineJob != null)
             {
-                labMachineJob = await jobAsyncTask.ConfigureAwait(false);
-                _logger.WriteInfo(_args, $"Job Type: Test, Job Id: {labMachineJob.Id}, Uri: {labMachineJob.Report}");
-                if (labMachineJob != null)
-                {
-                    _logger.WriteInfo(_args, "Waiting for test task...");
-                    //periodically check the status of the build task
-                    var timeout = TimeSpan.FromMinutes(60);
-                    var sw = Stopwatch.StartNew();
-                    while (sw.ElapsedTicks <= timeout.Ticks)
-                    {
-                        await Task.Delay(TimeSpan.FromMinutes(1));
+                _logger.WriteInfo(_args, "Waiting for test task...");
+                //periodically check the status of the build task
+                var timeout = TimeSpan.FromMinutes(180);
+                var sw = Stopwatch.StartNew();
 
-                        _logger.WriteInfo(_args, "Get test status from agent machines");
-                        var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
-                        _logger.WriteInfo(_args, $"Agent test job Id: {tmp.Id} Status: {tmp.State} Uri: {tmp.Report}");
-                        switch (tmp.State)
-                        {
-                            case JobState.Success:
-                                result.JobStatus = Status.Passed;
-                                break;
-                            case JobState.Failed:
-                                result.JobStatus = Status.Failed;
-                                break;
-                            case JobState.Aborting:
-                            case JobState.Aborted:
-                                result.JobStatus = Status.Cancelled;
-                                break;
-                            default:
-                                break;
-                        }
+                while (sw.ElapsedTicks <= timeout.Ticks)
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(1));
+
+                    _logger.WriteInfo(_args, "Get test status from agent machines");
+                    var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
+                    _logger.WriteInfo(_args, $"Agent test job Id: {tmp.Id} Status: {tmp.State} Uri: {tmp.Report}");
+                    switch (tmp.State)
+                    {
+                        case JobState.Success:
+                            result.JobStatus = Status.Passed;
+                            break;
+                        case JobState.Failed:
+                            result.JobStatus = Status.Failed;
+                            break;
+                        case JobState.Aborting:
+                        case JobState.Aborted:
+                            result.JobStatus = Status.Cancelled;
+                            break;
+                        default:
+                            break;
                     }
 
-                    _logger.WriteInfo(_args, "Waiting for test task timed out");
-                    result.JobStatus = Status.Failed;
-                    result.Message = "Waiting for test task timed out";
+                    if (result.JobStatus != default(Status))
+                    {
+                        //job is done
+                        return result;
+                    }
                 }
-                else
-                {
-                    throw new Exception();
-                }
+
+                _logger.WriteInfo(_args, "Waiting for test task timed out");
+                result.JobStatus = Status.Failed;
+                result.Message = "Waiting for test task timed out";
             }
-            catch (Exception ex)
+            else
             {
-                _logger.WriteError(_args, "Failed to submit test task to lab machines", ex);
+                _logger.WriteError(_args, "Failed to submit test task to lab machines");
                 result.JobStatus = Status.Failed;
                 result.Message = "Failed to submit test task to lab machines";
             }

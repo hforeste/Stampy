@@ -99,6 +99,10 @@ namespace StampyWorker
         [return: Queue("service-creation-jobs")]
         public static async Task<CloudStampyParameters> BuildChanges([QueueTrigger("build-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
         {
+            if (string.IsNullOrWhiteSpace(request.JobId))
+            {
+                request.JobId = Guid.NewGuid().ToString();
+            }
             var serviceCreationJob = request.Copy();
 
             if ((request.JobType & StampyJobType.Build) == StampyJobType.Build)
