@@ -88,6 +88,11 @@ namespace StampyWorker.Jobs
             }
         }
 
+        public Task<bool> Cancel()
+        {
+            throw new NotImplementedException();
+        }
+
         #region Helpers
         private List<string> AvailableDeploymentTemplates
         {
@@ -147,6 +152,9 @@ namespace StampyWorker.Jobs
                 return Path.Combine(Path.GetTempPath(), "DeployConsole", _parameters.CloudName);
             }
         }
+
+        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         #endregion
     }
 }

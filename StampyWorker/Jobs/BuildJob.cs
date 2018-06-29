@@ -1,4 +1,5 @@
 ﻿using StampyCommon;
+using StampyCommon.Models;
 using StampyWorker.Utilities;
 using System;
 using System.Threading.Tasks;
@@ -17,6 +18,14 @@ namespace StampyWorker.Jobs
         {
             _logger = logger;
             _args = cloudStampyArgs;
+        }
+
+        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+        public Task<bool> Cancel()
+        {
+            throw new NotImplementedException();
         }
 
         public async Task<JobResult> Execute()

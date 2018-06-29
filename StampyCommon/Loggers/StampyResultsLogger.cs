@@ -36,6 +36,11 @@ namespace StampyCommon.Loggers
             }
         }
 
+        public void WriteJobProgress(string requestId, string jobId, string status, string jobUri)
+        {
+            throw new NotImplementedException();
+        }
+
         public void WriteResult(CloudStampyParameters parameters, string status, int jobDurationMinutes, Exception ex)
         {
             WriteEvent(DateTime.UtcNow, parameters.RequestId, parameters.JobId, parameters.JobType, status, jobDurationMinutes, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");

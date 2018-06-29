@@ -33,7 +33,7 @@ namespace StampyWorker
             if ((myQueueItem.JobType & StampyJobType.Deploy) == StampyJobType.Deploy && (myQueueItem.FlowStatus == Status.InProgress || myQueueItem.FlowStatus == default(Status)))
             {
 
-                var jobResult = await ExecuteJob(myQueueItem, StampyJobType.Deploy);
+                var jobResult = await ExecuteJob(myQueueItem, StampyJobType.Deploy, TimeSpan.FromMinutes(240));
                 nextJob.FlowStatus = jobResult.JobStatus == Status.Passed ? Status.InProgress : jobResult.JobStatus;
             }
 
@@ -48,7 +48,7 @@ namespace StampyWorker
 
             if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService && (request.FlowStatus == Status.InProgress || request.FlowStatus == default(Status)))
             {
-                result = await ExecuteJob(request, StampyJobType.CreateService);
+                result = await ExecuteJob(request, StampyJobType.CreateService, TimeSpan.FromMinutes(10));
                 if (result.JobStatus == Status.Passed)
                 {
                     //TODO check the deployment template set in the parameters. Use that to determine what kind of service to create
@@ -107,7 +107,7 @@ namespace StampyWorker
 
             if ((request.JobType & StampyJobType.Build) == StampyJobType.Build)
             {
-                var result = await ExecuteJob(request, StampyJobType.Build);
+                var result = await ExecuteJob(request, StampyJobType.Build, TimeSpan.FromMinutes(120));
 
                 if (result.ResultDetails.TryGetValue("Build Share", out object val))
                 {
@@ -135,7 +135,7 @@ namespace StampyWorker
             {
                 if (request.TestCategories.Any() && !string.IsNullOrWhiteSpace(request.BuildPath) && !string.IsNullOrWhiteSpace(request.CloudName))
                 {
-                    var result = await ExecuteJob(request, StampyJobType.Test);
+                    var result = await ExecuteJob(request, StampyJobType.Test, TimeSpan.FromMinutes(180));
                     job.FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : Status.Failed;
                     if ((job.JobType & StampyJobType.RemoveResources) != StampyJobType.RemoveResources)
                     {
@@ -254,7 +254,7 @@ namespace StampyWorker
             }
         }
 
-        private static async Task<JobResult> ExecuteJob(CloudStampyParameters queueItem, StampyJobType requestedJobType)
+        private static async Task<JobResult> ExecuteJob(CloudStampyParameters queueItem, StampyJobType requestedJobType, TimeSpan timeout)
         {
             JobResult jobResult = null;
             Exception jobException = null;
@@ -268,7 +268,45 @@ namespace StampyWorker
                 {
                     sw.Start();
                     eventsLogger.WriteInfo(queueItem, "start job");
-                    jobResult = await job.Execute();
+                    var jobResultTask = job.Execute();
+                    var timeoutTask = Task.Run(async () => await Task.Delay(timeout));
+
+                    Task finishedTask;
+
+                    while (true)
+                    {
+                        var timerTask = Task.Run(async () => await Task.Delay(TimeSpan.FromMinutes(1)));
+                        finishedTask = await Task.WhenAny(new Task[] { jobResultTask,  timerTask, timeoutTask });
+
+                        if (finishedTask.Id == jobResultTask.Id)
+                        {
+                            //job is done
+                            jobResult = await jobResultTask;
+                            break;
+                        }
+                        else if (finishedTask.Id == timeoutTask.Id)
+                        {
+                            jobResult = new JobResult { JobStatus = Status.Cancelled };
+                            eventsLogger.WriteError(queueItem, $"Cancel job. {job.GetType().ToString()} took longer than timeout of {timeout.TotalMinutes.ToString()}mins");
+                            var isCancelled = await job.Cancel();
+
+                            if (!isCancelled)
+                            {
+                                eventsLogger.WriteError(queueItem, "Error while cancelling job");
+                            }
+                            else
+                            {
+                                eventsLogger.WriteInfo(queueItem, "Cancelled job successfully");
+                            }
+
+                            break;
+                        }
+                        else
+                        {
+                            //log the progress of the job
+                            resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, job.Status.ToString(), job.ReportUri);
+                        }
+                    }
                     sw.Stop();
                 }
                 catch (Exception ex)

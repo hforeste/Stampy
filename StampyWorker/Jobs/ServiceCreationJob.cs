@@ -100,6 +100,9 @@ namespace StampyWorker.Jobs
             }
         }
 
+        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
         private bool TryModifyDefinitions(string definitionPath, string additionalDefinitions)
         {
 
@@ -167,5 +170,9 @@ namespace StampyWorker.Jobs
             return table;
         }
 
+        public Task<bool> Cancel()
+        {
+            throw new NotImplementedException();
+        }
     }
 }
