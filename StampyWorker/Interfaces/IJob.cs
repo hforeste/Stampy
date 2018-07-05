@@ -10,7 +10,7 @@ namespace StampyWorker
 {
     interface IJob
     {
-        Status Status { get; set; }
+        Status JobStatus { get; set; }
         string ReportUri { get; set; }
         Task<JobResult> Execute();
         Task<bool> Cancel();

@@ -20,18 +20,19 @@ namespace StampyWorker.Jobs
             _args = cloudStampyArgs;
         }
 
-        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public Status JobStatus { get; set; }
+        public string ReportUri { get; set; }
 
         public Task<bool> Cancel()
         {
-            throw new NotImplementedException();
+            //no op
+            return Task.FromResult(false);
         }
 
         public async Task<JobResult> Execute()
         {
             var buildClient = BuildClientFactory.GetBuildClient(_logger, _args);
-            var jResult = await buildClient.ExecuteBuild();
+            var jResult = await JobStatusHelper.StartPeriodicStatusUpdates(this, (IJob)buildClient, buildClient.ExecuteBuild());
             return jResult;
         }
     }

@@ -8,6 +8,6 @@ namespace StampyCommon.Models
 {
     public enum Status
     {
-        None, Cancelled, Failed, Passed, InProgress
+        None, Cancelled, Failed, Passed, InProgress, Queued
     }
 }

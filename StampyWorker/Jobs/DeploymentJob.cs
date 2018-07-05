@@ -1,5 +1,6 @@
 ﻿using StampyCommon;
 using StampyCommon.Models;
+using StampyWorker.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -25,6 +26,9 @@ namespace StampyWorker.Jobs
             _parameters = cloudStampyArgs;
             _statusMessageBuilder = new StringBuilder();
         }
+
+        public Status JobStatus { get; set; }
+        public string ReportUri { get; set; }
 
         public Task<JobResult> Execute()
         {
@@ -59,7 +63,7 @@ namespace StampyWorker.Jobs
                 deployProcess.ErrorDataReceived += new DataReceivedEventHandler(ErrorReceived);
                 deployProcess.WaitForExit();
             }
-
+            JobStatus = _result.JobStatus;
             _logger.WriteInfo(_parameters, "Finished deployment...");
             _result.Message = _statusMessageBuilder.ToString();
             return Task.FromResult(_result);
@@ -69,12 +73,17 @@ namespace StampyWorker.Jobs
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                if (JobStatus == default(Status))
+                {
+                    JobStatus = Status.InProgress;
+                }
+
                 if (e.Data.Contains("Total Time for Template"))
                 {
-                    _result.JobStatus = Status.Passed;
-                }else if(e.Data.Contains("Total Time wasted"))
+                    JobStatus = _result.JobStatus = Status.Passed;
+                } else if (e.Data.Contains("Total Time wasted"))
                 {
-                    _result.JobStatus = Status.Failed;
+                    JobStatus = _result.JobStatus = Status.Failed;
                 }
             }
         }
@@ -84,16 +93,43 @@ namespace StampyWorker.Jobs
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 _statusMessageBuilder.AppendLine(e.Data);
-                _result.JobStatus = Status.Failed;
+                JobStatus = _result.JobStatus = Status.Failed;
             }
         }
 
         public Task<bool> Cancel()
         {
-            throw new NotImplementedException();
+            return Task.FromResult(false);
         }
 
         #region Helpers
+
+        private async Task GenerateReportUri()
+        {
+            var expireTime = DateTime.UtcNow.AddMinutes(30);
+            while (true)
+            {
+                try
+                {
+                    ReportUri = await ReportHelper.GetReport(Environment.GetEnvironmentVariable("StampyStorageConnectionString"), _parameters.RequestId, _parameters.CloudName);
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    if (DateTime.UtcNow >= expireTime)
+                    {
+                        throw new Exception("Could not get the report URL for this deployment job", ex);
+                    }
+                    else
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(30));
+                        //ignore, keep retrying
+                        _logger.WriteError(_parameters, "Failed to get the report URL. Will retry.", ex);
+                    }
+                }
+            }
+        }
+
         private List<string> AvailableDeploymentTemplates
         {
             get
@@ -153,8 +189,6 @@ namespace StampyWorker.Jobs
             }
         }
 
-        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         #endregion
     }
 }

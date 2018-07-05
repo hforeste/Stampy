@@ -26,6 +26,13 @@ namespace StampyWorker.Jobs
             _statusMessageBuilder = new StringBuilder();
         }
 
+        public Status JobStatus { get; set; }
+        public string ReportUri { get; set; }
+        public Task<bool> Cancel()
+        {
+            throw new NotImplementedException();
+        }
+
         public Task<JobResult> Execute()
         {
             if (!File.Exists(AntaresDeploymentExecutablePath))
@@ -66,7 +73,7 @@ namespace StampyWorker.Jobs
             }
 
             _result.Message = _statusMessageBuilder.ToString();
-            _result.JobStatus = _result.JobStatus == Status.None ? Status.Passed : _result.JobStatus;
+            _result.JobStatus = JobStatus = _result.JobStatus == Status.None ? Status.Passed : _result.JobStatus;
             return Task.FromResult(_result);
         }
 
@@ -74,11 +81,16 @@ namespace StampyWorker.Jobs
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                if (JobStatus == default(Status))
+                {
+                    JobStatus = Status.InProgress;
+                }
+
                 _logger.WriteInfo(_parameters, e.Data);
                 if (e.Data.Contains("<ERROR>") || e.Data.Contains("<Exception>") || e.Data.Contains("Error:"))
                 {
                     _statusMessageBuilder.AppendLine(e.Data);
-                    _result.JobStatus = Status.Failed;
+                    _result.JobStatus = JobStatus = Status.Failed;
                 }
             }
         }
@@ -88,7 +100,7 @@ namespace StampyWorker.Jobs
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 _statusMessageBuilder.AppendLine(e.Data);
-                _result.JobStatus = Status.Failed;
+                _result.JobStatus = JobStatus = Status.Failed;
             }
         }
 
@@ -99,9 +111,6 @@ namespace StampyWorker.Jobs
                 return Path.Combine(_parameters.BuildPath, @"hosting\Azure\RDTools\Tools\Antares\AntaresDeployment.exe");
             }
         }
-
-        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
         private bool TryModifyDefinitions(string definitionPath, string additionalDefinitions)
         {
@@ -168,11 +177,6 @@ namespace StampyWorker.Jobs
                     table.Add(name, value);
             }
             return table;
-        }
-
-        public Task<bool> Cancel()
-        {
-            throw new NotImplementedException();
         }
     }
 }

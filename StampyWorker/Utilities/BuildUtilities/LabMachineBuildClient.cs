@@ -12,7 +12,7 @@ using System.Xml;
 
 namespace StampyWorker.Utilities
 {
-    internal class LabMachineBuildClient : IBuildClient
+    internal class LabMachineBuildClient : IBuildClient, IJob
     {
         ICloudStampyLogger _logger;
         CloudStampyParameters _args;
@@ -21,6 +21,19 @@ namespace StampyWorker.Utilities
         {
             _logger = logger;
             _args = cloudStampArgs;
+        }
+
+        public Status JobStatus { get; set; }
+        public string ReportUri { get; set; }
+
+        public Task<bool> Cancel()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<JobResult> Execute()
+        {
+            throw new NotImplementedException();
         }
 
         public async Task<JobResult> ExecuteBuild(string dpkPath)
@@ -39,7 +52,7 @@ namespace StampyWorker.Utilities
             try
             {
                 labMachineJob = await jobAsyncTask.ConfigureAwait(false);
-                _logger.WriteInfo(_args, $"Job Type: Build, Job Id: {labMachineJob.Id}, Uri: {labMachineJob.Report}");
+                ReportUri = labMachineJob.Report;
                 if (labMachineJob != null)
                 {
                     _logger.WriteInfo(_args, "Waiting for build task...");
@@ -49,21 +62,24 @@ namespace StampyWorker.Utilities
                     while (sw.ElapsedTicks <= timeout.Ticks)
                     {
                         await Task.Delay(TimeSpan.FromMinutes(1));
-
-                        _logger.WriteInfo(_args, "Get build status from agent machines");
                         var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
-                        _logger.WriteInfo(_args, $"Agent build job Id: {tmp.Id} Status: {tmp.State} Uri: {tmp.Report}");
                         switch (tmp.State)
                         {
                             case JobState.Success:
-                                result.JobStatus = Status.Passed;
+                                JobStatus = result.JobStatus = Status.Passed;
                                 break;
                             case JobState.Failed:
-                                result.JobStatus = Status.Failed;
+                                JobStatus = result.JobStatus = Status.Failed;
                                 break;
                             case JobState.Aborting:
                             case JobState.Aborted:
-                                result.JobStatus = Status.Cancelled;
+                                JobStatus = result.JobStatus = Status.Cancelled;
+                                break;
+                            case JobState.Running:
+                                JobStatus = Status.InProgress;
+                                break;
+                            case JobState.Created:
+                                JobStatus = Status.Queued;
                                 break;
                             default:
                                 break;
@@ -86,7 +102,7 @@ namespace StampyWorker.Utilities
 
                     _logger.WriteInfo(_args, "Waiting for build task timed out");
 
-                    result.JobStatus = Status.Failed;
+                    JobStatus = result.JobStatus = Status.Failed;
                     result.Message = "Waiting for build task timed out";
                 }
                 else
@@ -97,7 +113,7 @@ namespace StampyWorker.Utilities
             catch(Exception ex)
             {
                 _logger.WriteError(_args, "Failed to submit build task to lab machines", ex);
-                result.JobStatus = Status.Failed;
+                JobStatus = result.JobStatus = Status.Failed;
                 result.Message = "Failed to submit build task to lab machines";
             }
 

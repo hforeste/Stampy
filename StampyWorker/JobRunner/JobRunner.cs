@@ -304,7 +304,7 @@ namespace StampyWorker
                         else
                         {
                             //log the progress of the job
-                            resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, job.Status.ToString(), job.ReportUri);
+                            resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, job.JobStatus.ToString(), job.ReportUri);
                         }
                     }
                     sw.Stop();

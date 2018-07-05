@@ -175,6 +175,16 @@ namespace StampyWorker.Jobs
             }
         }
 
+        public Task<JobResult> Execute()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> Cancel()
+        {
+            throw new NotImplementedException();
+        }
+
         private class LabAddress
         {
             public const string BuilderBase = "http://stampy.lab.redant.selfhost.corp.microsoft.com:8080/api";

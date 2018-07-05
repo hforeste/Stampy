@@ -20,8 +20,8 @@ namespace StampyWorker.Jobs
             _args = args;
         }
 
-        public Status Status { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public Status JobStatus { get;set; }
+        public string ReportUri { get; set; }
 
         public Task<bool> Cancel()
         {
@@ -62,7 +62,7 @@ namespace StampyWorker.Jobs
 
             var testClient = TestClientFactory.GetTestClient(_logger, _args);
             var jobResults = new List<JobResult>();
-            
+
             foreach (var categoryGroup in _args.TestCategories)
             {
                 var concurrentTasks = new List<Task<JobResult>>();
@@ -72,7 +72,8 @@ namespace StampyWorker.Jobs
                     concurrentTasks.Add(testClient.ExecuteTestAsync(category));
                 }
 
-                await Task.WhenAll(concurrentTasks);
+                JobStatus = Status.InProgress;
+                var compositeJobTask = await Task.WhenAll(concurrentTasks);
 
                 foreach (var finishedTask in concurrentTasks)
                 {
