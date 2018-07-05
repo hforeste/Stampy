@@ -52,7 +52,6 @@ namespace StampyWorker.Utilities
             try
             {
                 labMachineJob = await jobAsyncTask.ConfigureAwait(false);
-                ReportUri = labMachineJob.Report;
                 if (labMachineJob != null)
                 {
                     _logger.WriteInfo(_args, "Waiting for build task...");
@@ -83,6 +82,11 @@ namespace StampyWorker.Utilities
                                 break;
                             default:
                                 break;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(ReportUri))
+                        {
+                            ReportUri = labMachineJob.Report;
                         }
 
                         //when the job is done, get the new build path

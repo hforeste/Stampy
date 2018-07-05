@@ -278,6 +278,9 @@ namespace StampyWorker
                         var timerTask = Task.Run(async () => await Task.Delay(TimeSpan.FromMinutes(1)));
                         finishedTask = await Task.WhenAny(new Task[] { jobResultTask,  timerTask, timeoutTask });
 
+                        //log the progress of the job
+                        resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, job.JobStatus.ToString(), job.ReportUri);
+
                         if (finishedTask.Id == jobResultTask.Id)
                         {
                             //job is done
@@ -300,11 +303,6 @@ namespace StampyWorker
                             }
 
                             break;
-                        }
-                        else
-                        {
-                            //log the progress of the job
-                            resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, job.JobStatus.ToString(), job.ReportUri);
                         }
                     }
                     sw.Stop();
