@@ -12,10 +12,13 @@ using System.Threading.Tasks;
 
 namespace StampyWorker.Jobs
 {
-    internal class LabMachineTestClient : ITestClient
+    internal class LabMachineTestClient : ITestClient, IJob
     {
         ICloudStampyLogger _logger;
         CloudStampyParameters _args;
+
+        public Status JobStatus { get; set; }
+        public string ReportUri { get; set; }
 
         public LabMachineTestClient(ICloudStampyLogger logger, CloudStampyParameters args)
         {
@@ -36,7 +39,6 @@ namespace StampyWorker.Jobs
             _logger.WriteInfo(_args, "Submit test task to lab machines");
 
             var labMachineJob = await jobAsyncTask.ConfigureAwait(false);
-            _logger.WriteInfo(_args, $"Job Type: Test, Job Id: {labMachineJob.Id}, Uri: {labMachineJob.Report}");
 
             if (labMachineJob != null)
             {
@@ -51,18 +53,29 @@ namespace StampyWorker.Jobs
 
                     _logger.WriteInfo(_args, "Get test status from agent machines");
                     var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
-                    _logger.WriteInfo(_args, $"Agent test job Id: {tmp.Id} Status: {tmp.State} Uri: {tmp.Report}");
+
+                    if (string.IsNullOrWhiteSpace(ReportUri))
+                    {
+                        ReportUri = tmp.Report;
+                    }
+
                     switch (tmp.State)
                     {
                         case JobState.Success:
-                            result.JobStatus = Status.Passed;
+                            JobStatus = result.JobStatus = Status.Passed;
                             break;
                         case JobState.Failed:
-                            result.JobStatus = Status.Failed;
+                            JobStatus = result.JobStatus = Status.Failed;
                             break;
                         case JobState.Aborting:
                         case JobState.Aborted:
-                            result.JobStatus = Status.Cancelled;
+                            JobStatus = result.JobStatus = Status.Cancelled;
+                            break;
+                        case JobState.Created:
+                            JobStatus = result.JobStatus = Status.Queued;
+                            break;
+                        case JobState.Running:
+                            JobStatus = result.JobStatus = Status.InProgress;
                             break;
                         default:
                             break;

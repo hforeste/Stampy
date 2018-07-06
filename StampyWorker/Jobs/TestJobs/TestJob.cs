@@ -1,5 +1,6 @@
 ﻿using StampyCommon;
 using StampyCommon.Models;
+using StampyWorker.Utilities;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -61,33 +62,8 @@ namespace StampyWorker.Jobs
             }
 
             var testClient = TestClientFactory.GetTestClient(_logger, _args);
-            var jobResults = new List<JobResult>();
-
-            foreach (var categoryGroup in _args.TestCategories)
-            {
-                var concurrentTasks = new List<Task<JobResult>>();
-
-                foreach (var category in categoryGroup)
-                {
-                    concurrentTasks.Add(testClient.ExecuteTestAsync(category));
-                }
-
-                JobStatus = Status.InProgress;
-                var compositeJobTask = await Task.WhenAll(concurrentTasks);
-
-                foreach (var finishedTask in concurrentTasks)
-                {
-                    jobResults.Add(await finishedTask);
-                }
-            }
-
-            var aggregatedJobResult = new JobResult
-            {
-                JobStatus = jobResults.All(j => j.JobStatus == Status.Passed) ? Status.Passed : Status.Failed,
-                Message = string.Join(";", jobResults.Select(j  => j.Message))
-            };
-
-            return aggregatedJobResult;
+            var jResult = await JobStatusHelper.StartPeriodicStatusUpdates(this, (IJob)testClient, testClient.ExecuteTestAsync(_args.TestCategories[0].First()));
+            return jResult;
         }
 
         private bool TryCreateTestConfig(string fileShareLocation)
