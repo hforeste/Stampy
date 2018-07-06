@@ -27,8 +27,9 @@ namespace StampyCommon.Loggers
                         new KustoColumnMapping { ColumnName = "JobType", ColumnNumber = 3, DataType = "string" },
                         new KustoColumnMapping { ColumnName = "Status", ColumnNumber = 4, DataType = "string" },
                         new KustoColumnMapping { ColumnName = "JobDurationMinutes", ColumnNumber = 5, DataType = "int" },
-                        new KustoColumnMapping { ColumnName = "ExceptionType", ColumnNumber = 6, DataType = "string" },
-                        new KustoColumnMapping { ColumnName = "ExceptionDetails", ColumnNumber = 7, DataType = "string" }
+                        new KustoColumnMapping { ColumnName = "ReportUri", ColumnNumber = 6, DataType = "string" },
+                        new KustoColumnMapping { ColumnName = "ExceptionType", ColumnNumber = 7, DataType = "string" },
+                        new KustoColumnMapping { ColumnName = "ExceptionDetails", ColumnNumber = 8, DataType = "string" }
                     };
                 }
 
@@ -38,7 +39,7 @@ namespace StampyCommon.Loggers
 
         public void WriteJobProgress(string requestId, string jobId, StampyJobType jobType, string status, string jobUri)
         {
-            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, status, jobUri);
+            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, null, jobUri, null, null);
         }
 
         public void WriteResult(CloudStampyParameters parameters, string status, int jobDurationMinutes, Exception ex)
