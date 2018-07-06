@@ -9,6 +9,6 @@ namespace StampyCommon
     public interface IStampyResultsLogger
     {
         void WriteResult(CloudStampyParameters parameters, string status, int jobDurationMinutes, Exception ex);
-        void WriteJobProgress(string requestId, string jobId, string status, string jobUri);
+        void WriteJobProgress(string requestId, string jobId, StampyJobType jobType, string status, string jobUri);
     }
 }

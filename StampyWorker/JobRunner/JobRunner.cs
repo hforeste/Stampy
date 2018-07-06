@@ -279,7 +279,7 @@ namespace StampyWorker
                         finishedTask = await Task.WhenAny(new Task[] { jobResultTask,  timerTask, timeoutTask });
 
                         //log the progress of the job
-                        resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, job.JobStatus.ToString(), job.ReportUri);
+                        resultsLogger.WriteJobProgress(queueItem.RequestId, queueItem.JobId, requestedJobType, job.JobStatus.ToString(), job.ReportUri);
 
                         if (finishedTask.Id == jobResultTask.Id)
                         {
