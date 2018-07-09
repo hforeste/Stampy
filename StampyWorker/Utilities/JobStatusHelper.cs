@@ -56,7 +56,7 @@ namespace StampyWorker.Utilities
             return await StartPeriodicStatusUpdates(parent, childJob, childTask);
         }
 
-        private static Status DetermineOverallJobStatus(IEnumerable<IJob> childJobs)
+        internal static Status DetermineOverallJobStatus(IEnumerable<IJob> childJobs)
         {
             if (childJobs.GroupBy((j) => j.JobStatus).Count() == 1)
             {
@@ -67,6 +67,26 @@ namespace StampyWorker.Utilities
                 return Status.Failed;
             }
             else if (childJobs.Any(j => j.JobStatus == Status.Cancelled))
+            {
+                return Status.Cancelled;
+            }
+            else
+            {
+                return Status.InProgress;
+            }
+        }
+
+        internal static Status DetermineOverallJobStatus(IEnumerable<JobResult> jobs)
+        {
+            if (jobs.GroupBy((j) => j.JobStatus).Count() == 1)
+            {
+                return jobs.First().JobStatus;
+            }
+            else if (jobs.Any(j => j.JobStatus == Status.Failed))
+            {
+                return Status.Failed;
+            }
+            else if (jobs.Any(j => j.JobStatus == Status.Cancelled))
             {
                 return Status.Cancelled;
             }

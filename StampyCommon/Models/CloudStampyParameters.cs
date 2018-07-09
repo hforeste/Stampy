@@ -13,7 +13,7 @@ namespace StampyCommon
         public string DpkPath { get; set; }
         public string DeploymentTemplate { get; set; }
         public string CloudName { get; set; }
-        public List<IEnumerable<string>> TestCategories { get; set; }
+        public List<List<string>> TestCategories { get; set; }
         public string ExpiryDate { get; set; }
         public Status FlowStatus { get; set; }
         internal string HostingPath
@@ -26,7 +26,7 @@ namespace StampyCommon
 
         public CloudStampyParameters()
         {
-            TestCategories = new List<IEnumerable<string>>();           
+            TestCategories = new List<List<string>>();           
         }
 
         public override string ToString()

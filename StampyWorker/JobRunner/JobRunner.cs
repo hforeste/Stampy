@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using StampyCommon;
 using StampyCommon.Loggers;
 using StampyCommon.Models;
+using StampyWorker.Utilities;
 
 namespace StampyWorker
 {
@@ -25,7 +26,7 @@ namespace StampyWorker
         }
 
         [FunctionName("DeploymentCreator")]
-        [return: Queue("test-jobs-staging")]
+        [return: Queue("finished-deployment-jobs")]
         public static async Task<CloudStampyParameters> DeployToCloudService([QueueTrigger("deployment-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters myQueueItem)
         {
             var nextJob = myQueueItem.Copy();
@@ -128,23 +129,44 @@ namespace StampyWorker
         [return: Queue("stampy-jobs-finished")]
         public static async Task<CloudStampyParameters> TestRunner([QueueTrigger("test-jobs", Connection = "StampyStorageConnectionString")]CloudStampyParameters request)
         {
-            var job = request.Copy();
-            job.JobId = Guid.NewGuid().ToString();
+            var nextJob = request.Copy();
+            nextJob.JobId = Guid.NewGuid().ToString();
 
             if ((request.JobType & StampyJobType.Test) == StampyJobType.Test && (request.FlowStatus == Status.InProgress || request.FlowStatus == default(Status)))
             {
                 if (request.TestCategories.Any() && !string.IsNullOrWhiteSpace(request.BuildPath) && !string.IsNullOrWhiteSpace(request.CloudName))
                 {
-                    var result = await ExecuteJob(request, StampyJobType.Test, TimeSpan.FromMinutes(180));
-                    job.FlowStatus = result.JobStatus == Status.Passed ? Status.InProgress : Status.Failed;
-                    if ((job.JobType & StampyJobType.RemoveResources) != StampyJobType.RemoveResources)
+                    var resultTasks = new List<Task<JobResult>>();
+                    var results = new List<JobResult>();
+
+                    foreach (var testCategorySet in request.TestCategories)
                     {
-                        job.JobType = job.JobType | StampyJobType.RemoveResources;
+                        foreach (var testCategory in testCategorySet)
+                        {
+                            var testJob = request.Copy();
+                            testJob.JobId = Guid.NewGuid().ToString();
+                            testJob.TestCategories = new List<List<string>> { new List<string> { testCategory } };
+
+                            //test should timeout after 180 minutes. 
+                            //TODO double check if function runtime has default timeout
+                            resultTasks.Add(ExecuteJob(testJob, StampyJobType.Test, TimeSpan.FromMinutes(180)));
+                        }
+
+                        var testCategoryResults = await Task.WhenAll(resultTasks);
+                        results.AddRange(testCategoryResults);
+                    }  
+
+                    nextJob.FlowStatus = JobStatusHelper.DetermineOverallJobStatus(results);
+
+                    if ((nextJob.JobType & StampyJobType.RemoveResources) != StampyJobType.RemoveResources)
+                    {
+                        nextJob.JobType = nextJob.JobType | StampyJobType.RemoveResources;
                     }
-                    job.ExpiryDate = DateTime.UtcNow.AddHours(1).ToString();
+                    nextJob.ExpiryDate = DateTime.UtcNow.AddHours(1).ToString();
                 }
             }
-            return job;
+
+            return nextJob;
         }
 
         [FunctionName("ResourceCleaner")]
@@ -189,52 +211,52 @@ namespace StampyWorker
         {
             var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
             var queueClient = storageAccount.CreateCloudQueueClient();
-            var stagingQueue = queueClient.GetQueueReference("test-jobs-staging");
+            var finishedDeploymentJobs = queueClient.GetQueueReference("finished-deployment-jobs");
             var testJobsQueue = queueClient.GetQueueReference("test-jobs");
 
             var jobsPerRequest = new Dictionary<string, List<CloudQueueMessage>>();
 
-            var queueMessages = await stagingQueue.GetMessagesAsync(32, TimeSpan.FromSeconds(10), null, null);
+            var queueMessages = await finishedDeploymentJobs.GetMessagesAsync(32, TimeSpan.FromSeconds(10), null, null);
 
             foreach (var message in queueMessages)
             {
                 var stampyJob = JsonConvert.DeserializeObject<CloudStampyParameters>(message.AsString);
 
-                List<CloudQueueMessage> csp;
+                List<CloudQueueMessage> parameters;
 
-                if (!jobsPerRequest.TryGetValue(stampyJob.RequestId, out csp))
+                if (!jobsPerRequest.TryGetValue(stampyJob.RequestId, out parameters))
                 {
-                    csp = new List<CloudQueueMessage>
+                    parameters = new List<CloudQueueMessage>
                         {
                             message
                         };
 
-                    jobsPerRequest.Add(stampyJob.RequestId, csp);
+                    jobsPerRequest.Add(stampyJob.RequestId, parameters);
                 }
                 else
                 {
-                    csp.Add(message);
-                    jobsPerRequest[stampyJob.RequestId] = csp;
+                    parameters.Add(message);
+                    jobsPerRequest[stampyJob.RequestId] = parameters;
                 }
 
                 //if both geomaster and stamp deployment jobs are done then send a job to the TestBuild function
-                if (csp.Count >= 2)
+                if (parameters.Count == 2)
                 {
                     var testJobParameters = stampyJob.Copy();
                     testJobParameters.JobId = Guid.NewGuid().ToString();
-                    testJobParameters.FlowStatus = csp
+                    testJobParameters.FlowStatus = parameters
                         .Select(deploymentJobQueueMessage => JsonConvert.DeserializeObject<CloudStampyParameters>(deploymentJobQueueMessage.AsString))
                         .All(deploymentJob => deploymentJob.FlowStatus == Status.InProgress) ? Status.InProgress : Status.Failed;
 
-                    var queueMessageContext = new OperationContext();
+                    var testJobQueueContext = new OperationContext();
                     var testJobMessage = new CloudQueueMessage(testJobParameters.ToJsonString());
-                    await testJobsQueue.AddMessageAsync(testJobMessage, null, null, null, queueMessageContext);
+                    await testJobsQueue.AddMessageAsync(testJobMessage, null, null, null, testJobQueueContext);
 
-                    if (queueMessageContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
+                    if (testJobQueueContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
                     {
                         var deleteContext = new OperationContext();
                         var queueMessageDeletionTasks = new List<Task>();
-                        csp.ForEach(deploymentJobQueueMessage => queueMessageDeletionTasks.Add(stagingQueue.DeleteMessageAsync(deploymentJobQueueMessage, null, deleteContext)));
+                        parameters.ForEach(deploymentJobQueueMessage => queueMessageDeletionTasks.Add(finishedDeploymentJobs.DeleteMessageAsync(deploymentJobQueueMessage, null, deleteContext)));
 
                         await Task.WhenAll(queueMessageDeletionTasks);
 
@@ -242,13 +264,13 @@ namespace StampyWorker
                         {
                             if (item.HttpStatusCode != (int)HttpStatusCode.NoContent)
                             {
-                                eventsLogger.WriteError($"Failed to delete deployment-job from {stagingQueue.Name}. Storage Status Code: {item.HttpStatusCode}-{item.HttpStatusMessage}");
+                                eventsLogger.WriteError($"Failed to delete deployment-job from {finishedDeploymentJobs.Name}. Storage Status Code: {item.HttpStatusCode}-{item.HttpStatusMessage}");
                             }
                         }
                     }
                     else
                     {
-                        eventsLogger.WriteError($"Failed to add job to {testJobsQueue.Name}. Storage Status Code: {queueMessageContext.LastResult.HttpStatusCode}-{queueMessageContext.LastResult.HttpStatusMessage}", queueMessageContext.LastResult.Exception);
+                        eventsLogger.WriteError($"Failed to add job to {testJobsQueue.Name}. Storage Status Code: {testJobQueueContext.LastResult.HttpStatusCode}-{testJobQueueContext.LastResult.HttpStatusMessage}", testJobQueueContext.LastResult.Exception);
                     }
                 }
             }
