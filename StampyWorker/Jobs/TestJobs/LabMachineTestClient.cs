@@ -43,7 +43,7 @@ namespace StampyWorker.Jobs
             if (labMachineJob != null)
             {
                 _logger.WriteInfo(_args, "Waiting for test task...");
-                //periodically check the status of the build task
+                //periodically check the status of the test task
                 var timeout = TimeSpan.FromMinutes(180);
                 var sw = Stopwatch.StartNew();
 
@@ -53,6 +53,11 @@ namespace StampyWorker.Jobs
 
                     _logger.WriteInfo(_args, "Get test status from agent machines");
                     var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
+
+                    if (tmp == null)
+                    {
+                        throw new Exception($"Failed to get job id {labMachineJob.Id} from lab.");
+                    }
 
                     if (string.IsNullOrWhiteSpace(ReportUri))
                     {
@@ -81,25 +86,19 @@ namespace StampyWorker.Jobs
                             break;
                     }
 
-                    if (result.JobStatus != default(Status))
+                    if (result.JobStatus != default(Status) && result.JobStatus != Status.Queued && result.JobStatus != Status.InProgress)
                     {
                         //job is done
                         return result;
                     }
                 }
 
-                _logger.WriteInfo(_args, "Waiting for test task timed out");
-                result.JobStatus = Status.Failed;
-                result.Message = "Waiting for test task timed out";
+                throw new Exception("Waiting for test task timed out");
             }
             else
             {
-                _logger.WriteError(_args, "Failed to submit test task to lab machines");
-                result.JobStatus = Status.Failed;
-                result.Message = "Failed to submit test task to lab machines";
+                throw new Exception("Failed to submit test task to lab machines");
             }
-
-            return result;
         }
 
         private string GetLabAddress(IEnumerable<string> tests)

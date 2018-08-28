@@ -47,81 +47,72 @@ namespace StampyWorker.Utilities
 
             _logger.WriteInfo(_args, "Submit build task to lab machines");
 
-            Job labMachineJob = null;
+            var labMachineJob = await jobAsyncTask.ConfigureAwait(false);
 
-            try
+            if (labMachineJob != null)
             {
-                labMachineJob = await jobAsyncTask.ConfigureAwait(false);
-                if (labMachineJob != null)
+                _logger.WriteInfo(_args, "Waiting for build task...");
+                //periodically check the status of the build task
+                var timeout = TimeSpan.FromMinutes(60);
+                var sw = Stopwatch.StartNew();
+                while (sw.ElapsedTicks <= timeout.Ticks)
                 {
-                    _logger.WriteInfo(_args, "Waiting for build task...");
-                    //periodically check the status of the build task
-                    var timeout = TimeSpan.FromMinutes(60);
-                    var sw = Stopwatch.StartNew();
-                    while (sw.ElapsedTicks <= timeout.Ticks)
+                    await Task.Delay(TimeSpan.FromMinutes(1));
+                    var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
+
+                    if (tmp == null)
                     {
-                        await Task.Delay(TimeSpan.FromMinutes(1));
-                        var tmp = await Task.Run(() => labMachineClient.Get(labMachineJob.Id)).ConfigureAwait(false);
-                        switch (tmp.State)
-                        {
-                            case JobState.Success:
-                                JobStatus = result.JobStatus = Status.Passed;
-                                break;
-                            case JobState.Failed:
-                                JobStatus = result.JobStatus = Status.Failed;
-                                break;
-                            case JobState.Aborting:
-                            case JobState.Aborted:
-                                JobStatus = result.JobStatus = Status.Cancelled;
-                                break;
-                            case JobState.Running:
-                                JobStatus = Status.InProgress;
-                                break;
-                            case JobState.Created:
-                                JobStatus = Status.Queued;
-                                break;
-                            default:
-                                break;
-                        }
-
-                        if (string.IsNullOrWhiteSpace(ReportUri))
-                        {
-                            ReportUri = labMachineJob.Report;
-                        }
-
-                        //when the job is done, get the new build path
-                        if (result.JobStatus != default(Status))
-                        {
-                            _logger.WriteInfo(_args, "Getting build path from agent machines");
-                            string xmlResult = labMachineClient.GetResult(labMachineJob.Id);
-                            var doc = new XmlDocument();
-                            doc.LoadXml(xmlResult);
-                            XmlNodeList bss = doc.GetElementsByTagName("BuildPath");
-                            string buildShare = bss[0].InnerText;
-
-                            result.ResultDetails.Add("Build Share", buildShare);
-                            return result;
-                        }
+                        throw new Exception($"Failed to get job id {labMachineJob.Id} from lab.");
                     }
 
-                    _logger.WriteInfo(_args, "Waiting for build task timed out");
+                    switch (tmp.State)
+                    {
+                        case JobState.Success:
+                            JobStatus = result.JobStatus = Status.Passed;
+                            break;
+                        case JobState.Failed:
+                            JobStatus = result.JobStatus = Status.Failed;
+                            break;
+                        case JobState.Aborting:
+                        case JobState.Aborted:
+                            JobStatus = result.JobStatus = Status.Cancelled;
+                            break;
+                        case JobState.Running:
+                            JobStatus = Status.InProgress;
+                            break;
+                        case JobState.Created:
+                            JobStatus = Status.Queued;
+                            break;
+                        default:
+                            break;
+                    }
 
-                    JobStatus = result.JobStatus = Status.Failed;
-                    result.Message = "Waiting for build task timed out";
+                    if (string.IsNullOrWhiteSpace(ReportUri))
+                    {
+                        ReportUri = labMachineJob.Report;
+                    }
+
+                    //when the job is done, get the new build path
+                    if (result.JobStatus != default(Status) && result.JobStatus != Status.Queued && result.JobStatus != Status.InProgress)
+                    {
+                        _logger.WriteInfo(_args, "Getting build path from agent machines");
+                        string xmlResult = labMachineClient.GetResult(labMachineJob.Id);
+                        var doc = new XmlDocument();
+                        doc.LoadXml(xmlResult);
+                        XmlNodeList bss = doc.GetElementsByTagName("BuildPath");
+                        string buildShare = bss[0].InnerText;
+
+                        result.ResultDetails.Add("Build Share", buildShare);
+                        return result;
+                    }
                 }
-                else
-                {
-                    throw new Exception();
-                }
+
+                throw new Exception("Waiting for build task timed out");
             }
-            catch(Exception ex)
+            else
             {
-                _logger.WriteError(_args, "Failed to submit build task to lab machines", ex);
-                JobStatus = result.JobStatus = Status.Failed;
-                result.Message = "Failed to submit build task to lab machines";
+                throw new Exception("Failed to submit build task to lab machines");
             }
-
-            return result;
         }
     }
 }
