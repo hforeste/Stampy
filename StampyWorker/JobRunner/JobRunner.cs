@@ -153,6 +153,7 @@ namespace StampyWorker
                         }
 
                         var testCategoryResults = await Task.WhenAll(resultTasks);
+                        resultTasks.Clear();
                         results.AddRange(testCategoryResults);
                     }  
 
