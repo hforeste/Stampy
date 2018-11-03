@@ -19,7 +19,7 @@ namespace StampyWorker
 
         public string KustoClientId => Environment.GetEnvironmentVariable("KustoClientId");
 
-        public string KustoClientSecret => Environment.GetEnvironmentVariable("KustoSecret");
+        public string KustoClientSecret => Environment.GetEnvironmentVariable("KustoClientSecret");
 
         public bool IsProduction => string.Equals(Environment.GetEnvironmentVariable("USERNAME"), "awtester", StringComparison.CurrentCultureIgnoreCase);
     }
