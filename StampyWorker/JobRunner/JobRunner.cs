@@ -339,7 +339,7 @@ namespace StampyWorker
                 }
                 finally
                 {
-                    resultsLogger.WriteResult(queueItem, jobResult.JobStatus.ToString(), (int)sw.Elapsed.TotalMinutes, jobException);
+                    resultsLogger.WriteResult(queueItem.RequestId, queueItem.JobId, requestedJobType, jobResult.JobStatus.ToString(), (int)sw.Elapsed.TotalMinutes, jobException);
                 }
             }
             else

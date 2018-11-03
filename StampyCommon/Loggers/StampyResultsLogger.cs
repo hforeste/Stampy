@@ -37,14 +37,14 @@ namespace StampyCommon.Loggers
             }
         }
 
-        public void WriteJobProgress(string requestId, string jobId, StampyJobType jobType, string status, string jobUri)
+        public void WriteJobProgress(string requestId, string jobId, StampyJobType jobType, string status, string jobUri, Exception ex = null)
         {
-            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, null, jobUri, null, null);
+            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, null, jobUri, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");
         }
 
-        public void WriteResult(CloudStampyParameters parameters, string status, int jobDurationMinutes, Exception ex)
+        public void WriteResult(string requestId, string jobId, StampyJobType jobType, string status, int jobDurationMinutes, Exception ex)
         {
-            WriteEvent(DateTime.UtcNow, parameters.RequestId, parameters.JobId, parameters.JobType, status, jobDurationMinutes, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");
+            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, jobDurationMinutes, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");
         }
     }
 }
