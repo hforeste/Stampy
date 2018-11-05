@@ -1,4 +1,6 @@
-﻿using StampyCommon;
+﻿using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.File;
+using StampyCommon;
 using StampyCommon.Models;
 using StampyWorker.Utilities;
 using System;
@@ -18,6 +20,7 @@ namespace StampyWorker.Jobs
         private List<string> _availableDeploymentTemplates;
         private StringBuilder _statusMessageBuilder;
         private JobResult _result;
+        private Task _periodicAzureFileLogger;
 
         public DeploymentJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
@@ -30,7 +33,7 @@ namespace StampyWorker.Jobs
         public Status JobStatus { get; set; }
         public string ReportUri { get; set; }
 
-        public Task<JobResult> Execute()
+        public async Task<JobResult> Execute()
         {
 
             if (!AvailableDeploymentTemplates.Any(d => d.Equals(_parameters.DeploymentTemplate, StringComparison.CurrentCultureIgnoreCase)))
@@ -47,7 +50,7 @@ namespace StampyWorker.Jobs
 
             var processStartInfo = new ProcessStartInfo();
             processStartInfo.FileName = DeployConsolePath;
-            processStartInfo.Arguments = $"/LockBox={_parameters.CloudName} /Template={_parameters.DeploymentTemplate} /BuildPath={_parameters.BuildPath + @"\Hosting"} /TempDir={_deploymentArtificatsDirectory} /AutoRetry=true /LogFile={_azureLogFilePath}";
+            processStartInfo.Arguments = $"/LockBox={_parameters.CloudName} /Template={_parameters.DeploymentTemplate} /BuildPath={_parameters.BuildPath + @"\Hosting"} /TempDir={_deploymentArtificatsDirectory} /AutoRetry=true /LogFile={_localFilePath}";
             processStartInfo.UseShellExecute = false;
             processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
             processStartInfo.RedirectStandardError = true;
@@ -66,13 +69,28 @@ namespace StampyWorker.Jobs
             JobStatus = _result.JobStatus;
             _logger.WriteInfo(_parameters, "Finished deployment...");
             _result.Message = _statusMessageBuilder.ToString();
-            return Task.FromResult(_result);
+            _periodicAzureFileLogger.Dispose();
+
+            await CopyToAzureFileShareAsync(_localFilePath);
+            return _result;
         }
 
         private void OutputReceived(object sender, DataReceivedEventArgs e)
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                if (_periodicAzureFileLogger == null)
+                {
+                    _periodicAzureFileLogger = Task.Run(async () =>
+                    {
+                        while (true)
+                        {
+                            await CopyToAzureFileShareAsync(_localFilePath);
+                            await Task.Delay(10 * 1000);
+                        }
+                    });
+                }
+
                 if (JobStatus == default(Status))
                 {
                     JobStatus = Status.InProgress;
@@ -100,6 +118,49 @@ namespace StampyWorker.Jobs
         public Task<bool> Cancel()
         {
             return Task.FromResult(false);
+        }
+
+        private async Task CopyToAzureFileShareAsync(string localFilePath)
+        {
+            var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
+            var fileShareClient = storageAccount.CreateCloudFileClient();
+            var fileShare = fileShareClient.ListShares("stampy-job-results").FirstOrDefault();
+            var root = fileShare.GetRootDirectoryReference();
+            var requestDirectory = root.GetDirectoryReference(_parameters.RequestId);
+
+            var operationContext = new OperationContext();
+
+            if (await requestDirectory.CreateIfNotExistsAsync(null, operationContext))
+            {
+                _logger.WriteInfo(_parameters, string.Format("Created new file share to host deployment logs at {0}. HttpResult: {1}", requestDirectory.Uri, operationContext.LastResult.HttpStatusCode));
+            }
+
+            var logFileName = Path.GetFileName(_localFilePath);
+            var fileReference = requestDirectory.GetFileReference(logFileName);
+            await fileReference.UploadFromFileAsync(_localFilePath, AccessCondition.GenerateEmptyCondition(), null, operationContext);
+            _logger.WriteInfo(_parameters, string.Format("Copying local deployment log to azure file share. HttpResult: {0}", operationContext.LastResult.HttpStatusCode));
+        }
+
+        private async Task<CloudFileStream> GetAzureFileWriteStream(string localFilePath)
+        {
+            var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
+            var fileShareClient = storageAccount.CreateCloudFileClient();
+            var fileShare = fileShareClient.ListShares("stampy-job-results").FirstOrDefault();
+            var root = fileShare.GetRootDirectoryReference();
+            var requestDirectory = root.GetDirectoryReference(_parameters.RequestId);
+
+            var operationContext = new OperationContext();
+
+            if (await requestDirectory.CreateIfNotExistsAsync(null, operationContext))
+            {
+                _logger.WriteInfo(_parameters, string.Format("Created new file share to host deployment logs at {0}", requestDirectory.Uri));
+            }
+
+            var logFileName = Path.GetFileName(localFilePath);
+            var fileReference = requestDirectory.GetFileReference(localFilePath);
+            var streamTask = fileReference.OpenWriteAsync(2000, AccessCondition.GenerateEmptyCondition(), null, operationContext);
+            _logger.WriteInfo(_parameters, string.Format("Opened stream to file in azure file share. HttpResult: {0}", operationContext.LastResult.HttpStatusCode));
+            return await streamTask;
         }
 
         #region Helpers
@@ -167,11 +228,11 @@ namespace StampyWorker.Jobs
             }
         }
 
-        private string _azureLogFilePath
+        private string _localFilePath
         {
             get
             {
-                var logFilePath = Path.Combine(_jobDirectory, "devdeploy", $"{_parameters.CloudName}.{_parameters.DeploymentTemplate.Replace(".xml", string.Empty)}.log");
+                var logFilePath = Path.Combine(Path.GetTempPath(), "devdeploy", $"{_parameters.CloudName}.{_parameters.DeploymentTemplate.Replace(".xml", string.Empty)}.log");
                 var logDirectory = Path.GetDirectoryName(logFilePath);
                 if (!Directory.Exists(logDirectory))
                 {

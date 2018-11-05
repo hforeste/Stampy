@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.WindowsAzure.Storage;
@@ -49,6 +50,20 @@ namespace StampyWorker
 
             if ((request.JobType & StampyJobType.CreateService) == StampyJobType.CreateService && (request.FlowStatus == Status.InProgress || request.FlowStatus == default(Status)))
             {
+                if (string.IsNullOrWhiteSpace(request.CloudName))
+                {
+                    const string alphanumericalchars = "abcdefghijklmnopqrstuvwxyz1234567890";
+                    var rng = new RNGCryptoServiceProvider();
+                    byte[] xx = new byte[16];
+                    rng.GetBytes(xx);
+                    char[] y = new char[8];
+                    for (int i = 0; i < y.Length; i++)
+                    {
+                        y[i] = alphanumericalchars[(xx[i] % alphanumericalchars.Length)];
+                    }
+                    request.CloudName = $"stampy-{new string(y)}";
+                }
+
                 result = await ExecuteJob(request, StampyJobType.CreateService, TimeSpan.FromMinutes(10));
                 if (result.JobStatus == Status.Passed)
                 {
