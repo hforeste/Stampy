@@ -21,7 +21,6 @@ namespace StampyWorker.Jobs
         private List<string> _availableDeploymentTemplates;
         private StringBuilder _statusMessageBuilder;
         private JobResult _result;
-        private Task _periodicAzureFileLogger;
         private ConcurrentQueue<string> _deploymentContent;
         private List<Task> _loggingTasks;
         private string _logUri;
@@ -37,7 +36,7 @@ namespace StampyWorker.Jobs
         }
 
         public Status JobStatus { get; set; }
-        public string ReportUri { get { return _logUri; } set { } }
+        public string ReportUri { get; set; }
 
         public async Task<JobResult> Execute()
         {
@@ -196,19 +195,35 @@ namespace StampyWorker.Jobs
                 if (!await fileReference.ExistsAsync())
                 {
                     await fileReference.CreateAsync(8 * 1024, null, null, operationContext);
-                    _logger.WriteInfo(_parameters, $"Create deployment log file in azure. Location: {fileReference.Uri.AbsolutePath} HttpResult: {operationContext.LastResult.HttpStatusCode}");
+                    _logger.WriteInfo(_parameters, $"Create deployment log file in azure. Location: {fileReference.Uri} HttpResult: {operationContext.LastResult.HttpStatusCode}");
                 }
 
                 await fileReference.ResizeAsync(fileReference.Properties.Length + buffer.Length, null, null, operationContext);
-                _logger.WriteInfo(_parameters, $"Resize the azure file {fileReference.Uri.AbsolutePath} so to add new content. HttpResult: {operationContext.LastResult.HttpStatusCode}");
-
-                var streamTask = fileReference.OpenWriteAsync(2000, null, null, operationContext);
+                _logger.WriteInfo(_parameters, $"Resize the azure file {fileReference.Uri} so to add new content. HttpResult: {operationContext.LastResult.HttpStatusCode}");
 
                 using (var fileStream = await fileReference.OpenWriteAsync(null, null, null, operationContext))
                 {
                     fileStream.Seek(buffer.Length * -1, SeekOrigin.End);
                     await fileStream.WriteAsync(buffer, 0, buffer.Length);
                 }
+
+                if (string.IsNullOrWhiteSpace(ReportUri))
+                {
+                    SharedAccessFilePolicy sharedPolicy = new SharedAccessFilePolicy()
+                    {
+                        SharedAccessExpiryTime = DateTime.UtcNow.AddMonths(1),
+                        Permissions = SharedAccessFilePermissions.Read
+                    };
+
+                    var permissions = await fileShare.GetPermissionsAsync(null, null, null);
+                    permissions.SharedAccessPolicies.Clear();
+                    permissions.SharedAccessPolicies.Add("read", sharedPolicy);
+
+                    await fileShare.SetPermissionsAsync(permissions, null, null, null);
+
+                    ReportUri = new Uri(fileReference.StorageUri.PrimaryUri.ToString() + fileReference.GetSharedAccessSignature(null, "read")).ToString();
+                }
+
             }catch(Exception ex)
             {
                 _logger.WriteError(_parameters, $"Failed to write deployment log to azure file", ex);
