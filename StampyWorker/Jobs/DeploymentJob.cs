@@ -165,7 +165,7 @@ namespace StampyWorker.Jobs
             }
             else
             {
-                _logger.WriteInfo(_parameters, "Wait on in progress tasks writing logs to azure file");
+                _logger.WriteInfo(_parameters, "Waiting on writing logs to azure file");
                 await Task.WhenAll(_loggingTasks);
             }
         }
@@ -199,7 +199,10 @@ namespace StampyWorker.Jobs
                 }
 
                 await fileReference.ResizeAsync(fileReference.Properties.Length + buffer.Length, null, null, operationContext);
-                _logger.WriteInfo(_parameters, $"Resize the azure file {fileReference.Uri} so to add new content. HttpResult: {operationContext.LastResult.HttpStatusCode}");
+                if (operationContext.LastResult.HttpStatusCode != 200)
+                {
+                    _logger.WriteInfo(_parameters, $"Resize the azure file {fileReference.Uri} so to add new content. HttpResult: {operationContext.LastResult.HttpStatusCode}");
+                }
 
                 using (var fileStream = await fileReference.OpenWriteAsync(null, null, null, operationContext))
                 {
