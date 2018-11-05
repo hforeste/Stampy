@@ -4,6 +4,7 @@ using StampyCommon;
 using StampyCommon.Models;
 using StampyWorker.Utilities;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -21,6 +22,8 @@ namespace StampyWorker.Jobs
         private StringBuilder _statusMessageBuilder;
         private JobResult _result;
         private Task _periodicAzureFileLogger;
+        private ConcurrentQueue<string> _deploymentContent;
+        private List<Task> _loggingTasks;
 
         public DeploymentJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
@@ -28,6 +31,8 @@ namespace StampyWorker.Jobs
             _result = new JobResult();
             _parameters = cloudStampyArgs;
             _statusMessageBuilder = new StringBuilder();
+            _deploymentContent = new ConcurrentQueue<string>();
+            _loggingTasks = new List<Task>();
         }
 
         public Status JobStatus { get; set; }
@@ -69,9 +74,12 @@ namespace StampyWorker.Jobs
             JobStatus = _result.JobStatus;
             _logger.WriteInfo(_parameters, "Finished deployment...");
             _result.Message = _statusMessageBuilder.ToString();
-            _periodicAzureFileLogger.Dispose();
 
-            await CopyToAzureFileShareAsync(_localFilePath);
+            while (_deploymentContent.Any())
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
+
             return _result;
         }
 
@@ -79,17 +87,8 @@ namespace StampyWorker.Jobs
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
-                if (_periodicAzureFileLogger == null)
-                {
-                    _periodicAzureFileLogger = Task.Run(async () =>
-                    {
-                        while (true)
-                        {
-                            await CopyToAzureFileShareAsync(_localFilePath);
-                            await Task.Delay(10 * 1000);
-                        }
-                    });
-                }
+                _deploymentContent.Enqueue(e.Data);
+                CreateLogIfNotExistAppendAsync().ConfigureAwait(false);
 
                 if (JobStatus == default(Status))
                 {
@@ -110,6 +109,8 @@ namespace StampyWorker.Jobs
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                _deploymentContent.Enqueue(e.Data);
+                CreateLogIfNotExistAppendAsync().ConfigureAwait(false);
                 _statusMessageBuilder.AppendLine(e.Data);
                 JobStatus = _result.JobStatus = Status.Failed;
             }
@@ -141,7 +142,35 @@ namespace StampyWorker.Jobs
             _logger.WriteInfo(_parameters, string.Format("Copying local deployment log to azure file share. HttpResult: {0}", operationContext.LastResult.HttpStatusCode));
         }
 
-        private async Task CreateIfNotExistAppend(string content)
+        private async Task CreateLogIfNotExistAppendAsync()
+        {
+            if (_loggingTasks.Any(t => t.IsCompleted) || !_loggingTasks.Any())
+            {
+                StringBuilder logBuilder = new StringBuilder();
+                var sw = Stopwatch.StartNew();
+                while (_deploymentContent.Any() && sw.Elapsed <= TimeSpan.FromSeconds(10))
+                {
+                    string log;
+                    if (_deploymentContent.TryDequeue(out log))
+                    {
+                        logBuilder.AppendLine(log);
+                    }
+                }
+                sw.Stop();
+
+                if (!string.IsNullOrWhiteSpace(logBuilder.ToString()))
+                {
+                    _loggingTasks.Add(CreateIfNotExistAppendAsync(logBuilder.ToString()));
+                }
+            }
+            else
+            {
+                _logger.WriteInfo(_parameters, "Wait on in progress tasks writing logs to azure file");
+                await Task.WhenAll(_loggingTasks);
+            }
+        }
+
+        private async Task CreateIfNotExistAppendAsync(string content)
         {
             try
             {
