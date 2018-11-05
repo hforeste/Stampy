@@ -194,7 +194,7 @@ namespace StampyWorker.Jobs
 
                 if (!await fileReference.ExistsAsync())
                 {
-                    await fileReference.CreateAsync(8 * 1024, null, null, operationContext);
+                    await fileReference.CreateAsync(0, null, null, operationContext);
                     _logger.WriteInfo(_parameters, $"Create deployment log file in azure. Location: {fileReference.Uri} HttpResult: {operationContext.LastResult.HttpStatusCode}");
                 }
 
