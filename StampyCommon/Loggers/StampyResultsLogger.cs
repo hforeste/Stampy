@@ -37,9 +37,9 @@ namespace StampyCommon.Loggers
             }
         }
 
-        public void WriteJobProgress(string requestId, string jobId, StampyJobType jobType, string status, string jobUri, Exception ex = null)
+        public void WriteJobProgress(string requestId, string jobId, StampyJobType jobType, string status, string jobUri)
         {
-            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, null, jobUri, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");
+            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, null, jobUri, null, null);
         }
 
         public void WriteResult(string requestId, string jobId, StampyJobType jobType, string status, int jobDurationMinutes, Exception ex)
