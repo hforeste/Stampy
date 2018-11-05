@@ -141,26 +141,45 @@ namespace StampyWorker.Jobs
             _logger.WriteInfo(_parameters, string.Format("Copying local deployment log to azure file share. HttpResult: {0}", operationContext.LastResult.HttpStatusCode));
         }
 
-        private async Task<CloudFileStream> GetAzureFileWriteStream(string localFilePath)
+        private async Task CreateIfNotExistAppend(string content)
         {
-            var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
-            var fileShareClient = storageAccount.CreateCloudFileClient();
-            var fileShare = fileShareClient.ListShares("stampy-job-results").FirstOrDefault();
-            var root = fileShare.GetRootDirectoryReference();
-            var requestDirectory = root.GetDirectoryReference(_parameters.RequestId);
-
-            var operationContext = new OperationContext();
-
-            if (await requestDirectory.CreateIfNotExistsAsync(null, operationContext))
+            try
             {
-                _logger.WriteInfo(_parameters, string.Format("Created new file share to host deployment logs at {0}", requestDirectory.Uri));
-            }
+                var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
+                var fileShareClient = storageAccount.CreateCloudFileClient();
+                var fileShare = fileShareClient.ListShares("stampy-job-results").FirstOrDefault();
+                var root = fileShare.GetRootDirectoryReference();
+                var requestDirectory = root.GetDirectoryReference(_parameters.RequestId);
 
-            var logFileName = Path.GetFileName(localFilePath);
-            var fileReference = requestDirectory.GetFileReference(localFilePath);
-            var streamTask = fileReference.OpenWriteAsync(2000, AccessCondition.GenerateEmptyCondition(), null, operationContext);
-            _logger.WriteInfo(_parameters, string.Format("Opened stream to file in azure file share. HttpResult: {0}", operationContext.LastResult.HttpStatusCode));
-            return await streamTask;
+                var operationContext = new OperationContext();
+
+                if (await requestDirectory.CreateIfNotExistsAsync(null, operationContext))
+                {
+                    _logger.WriteInfo(_parameters, string.Format("Created new file share to host deployment logs at {0}. HttpResult:{1}", requestDirectory.Uri, operationContext.LastResult.HttpStatusCode));
+                }
+
+                var logFileName = Path.GetFileName(_localFilePath);
+                var fileReference = requestDirectory.GetFileReference(logFileName);
+
+                var buffer = Encoding.UTF8.GetBytes(content);
+
+                await fileReference.CreateAsync(8 * 1024, AccessCondition.GenerateIfNotExistsCondition(), null, operationContext);
+                _logger.WriteInfo(_parameters, $"Create deployment log file in azure. Location: {fileReference.Uri.AbsolutePath} HttpResult: {operationContext.LastResult.HttpStatusCode}");
+
+                await fileReference.ResizeAsync(fileReference.Properties.Length + buffer.Length, null, null, operationContext);
+                _logger.WriteInfo(_parameters, $"Resize the azure file {fileReference.Uri.AbsolutePath} so to add new content. HttpResult: {operationContext.LastResult.HttpStatusCode}");
+
+                var streamTask = fileReference.OpenWriteAsync(2000, AccessCondition.GenerateEmptyCondition(), null, operationContext);
+
+                using (var fileStream = await fileReference.OpenWriteAsync(null, null, null, operationContext))
+                {
+                    fileStream.Seek(buffer.Length * -1, SeekOrigin.End);
+                    await fileStream.WriteAsync(buffer, 0, buffer.Length);
+                }
+            }catch(Exception ex)
+            {
+                _logger.WriteError(_parameters, $"Failed to write deployment log to azure file", ex);
+            }
         }
 
         #region Helpers
