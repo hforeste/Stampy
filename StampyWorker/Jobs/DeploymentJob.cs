@@ -24,6 +24,7 @@ namespace StampyWorker.Jobs
         private Task _periodicAzureFileLogger;
         private ConcurrentQueue<string> _deploymentContent;
         private List<Task> _loggingTasks;
+        private string _logUri;
 
         public DeploymentJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
@@ -36,7 +37,7 @@ namespace StampyWorker.Jobs
         }
 
         public Status JobStatus { get; set; }
-        public string ReportUri { get; set; }
+        public string ReportUri { get { return _logUri; } set { } }
 
         public async Task<JobResult> Execute()
         {
@@ -192,13 +193,16 @@ namespace StampyWorker.Jobs
 
                 var buffer = Encoding.UTF8.GetBytes(content);
 
-                await fileReference.CreateAsync(8 * 1024, AccessCondition.GenerateIfNotExistsCondition(), null, operationContext);
-                _logger.WriteInfo(_parameters, $"Create deployment log file in azure. Location: {fileReference.Uri.AbsolutePath} HttpResult: {operationContext.LastResult.HttpStatusCode}");
+                if (!await fileReference.ExistsAsync())
+                {
+                    await fileReference.CreateAsync(8 * 1024, null, null, operationContext);
+                    _logger.WriteInfo(_parameters, $"Create deployment log file in azure. Location: {fileReference.Uri.AbsolutePath} HttpResult: {operationContext.LastResult.HttpStatusCode}");
+                }
 
                 await fileReference.ResizeAsync(fileReference.Properties.Length + buffer.Length, null, null, operationContext);
                 _logger.WriteInfo(_parameters, $"Resize the azure file {fileReference.Uri.AbsolutePath} so to add new content. HttpResult: {operationContext.LastResult.HttpStatusCode}");
 
-                var streamTask = fileReference.OpenWriteAsync(2000, AccessCondition.GenerateEmptyCondition(), null, operationContext);
+                var streamTask = fileReference.OpenWriteAsync(2000, null, null, operationContext);
 
                 using (var fileStream = await fileReference.OpenWriteAsync(null, null, null, operationContext))
                 {
@@ -208,6 +212,7 @@ namespace StampyWorker.Jobs
             }catch(Exception ex)
             {
                 _logger.WriteError(_parameters, $"Failed to write deployment log to azure file", ex);
+                throw;
             }
         }
 
