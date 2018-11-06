@@ -255,6 +255,7 @@ namespace StampyWorker
                     jobsPerRequest[stampyJob.RequestId] = parameters;
                 }
 
+                var generalOperationContext = new OperationContext();
                 //if both geomaster and stamp deployment jobs are done then send a job to the TestBuild function
                 if (parameters.Count == 2)
                 {
@@ -263,12 +264,10 @@ namespace StampyWorker
                     testJobParameters.FlowStatus = parameters
                         .Select(deploymentJobQueueMessage => JsonConvert.DeserializeObject<CloudStampyParameters>(deploymentJobQueueMessage.AsString))
                         .All(deploymentJob => deploymentJob.FlowStatus == Status.InProgress) ? Status.InProgress : Status.Failed;
-
-                    var testJobQueueContext = new OperationContext();
                     var testJobMessage = new CloudQueueMessage(testJobParameters.ToJsonString());
-                    await testJobsQueue.AddMessageAsync(testJobMessage, null, null, null, testJobQueueContext);
+                    await testJobsQueue.AddMessageAsync(testJobMessage, null, null, null, generalOperationContext);
 
-                    if (testJobQueueContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
+                    if (generalOperationContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
                     {
                         var deleteContext = new OperationContext();
                         var queueMessageDeletionTasks = new List<Task>();
@@ -286,7 +285,16 @@ namespace StampyWorker
                     }
                     else
                     {
-                        eventsLogger.WriteError($"Failed to add job to {testJobsQueue.Name}. Storage Status Code: {testJobQueueContext.LastResult.HttpStatusCode}-{testJobQueueContext.LastResult.HttpStatusMessage}", testJobQueueContext.LastResult.Exception);
+                        eventsLogger.WriteError($"Failed to add job to {testJobsQueue.Name}. Storage Status Code: {generalOperationContext.LastResult.HttpStatusCode}-{generalOperationContext.LastResult.HttpStatusMessage}", generalOperationContext.LastResult.Exception);
+                    }
+                }
+                //if the job didn't require a deployment then don't wait
+                else if ((stampyJob.JobType & StampyJobType.Deploy) != StampyJobType.Deploy)
+                {
+                    await testJobsQueue.AddMessageAsync(message, null, null, null, generalOperationContext);
+                    if (generalOperationContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
+                    {
+                        await finishedDeploymentJobs.DeleteMessageAsync(message, null, generalOperationContext);
                     }
                 }
             }
