@@ -306,7 +306,7 @@ namespace StampyWorker
                 {
                     sw.Start();
                     eventsLogger.WriteInfo(queueItem, "start job");
-                    var jobResultTask = job.Execute();
+                    var jobResultTask = Task.Run(() => job.Execute());
                     var timeoutTask = Task.Run(async () => await Task.Delay(timeout));
 
                     Task finishedTask;

@@ -57,7 +57,7 @@ namespace StampyWorker.Jobs
             processStartInfo.FileName = DeployConsolePath;
             processStartInfo.Arguments = $"/LockBox={_parameters.CloudName} /Template={_parameters.DeploymentTemplate} /BuildPath={_parameters.BuildPath + @"\Hosting"} /TempDir={_deploymentArtificatsDirectory} /AutoRetry=true /LogFile={_localFilePath}";
             processStartInfo.UseShellExecute = false;
-            processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            processStartInfo.WindowStyle = ProcessWindowStyle.Minimized;
             processStartInfo.RedirectStandardError = true;
             processStartInfo.RedirectStandardOutput = true;
 
@@ -77,6 +77,7 @@ namespace StampyWorker.Jobs
 
             while (_deploymentContent.Any())
             {
+                await CreateLogIfNotExistAppendAsync();
                 await Task.Delay(TimeSpan.FromSeconds(5));
             }
 
@@ -144,7 +145,7 @@ namespace StampyWorker.Jobs
 
         private async Task CreateLogIfNotExistAppendAsync()
         {
-            if (_loggingTasks.Any(t => t.IsCompleted) || !_loggingTasks.Any())
+            if (_loggingTasks.All(t => t.IsCompleted) || !_loggingTasks.Any())
             {
                 StringBuilder logBuilder = new StringBuilder();
                 var sw = Stopwatch.StartNew();
@@ -167,6 +168,7 @@ namespace StampyWorker.Jobs
             {
                 _logger.WriteInfo(_parameters, "Waiting on writing logs to azure file");
                 await Task.WhenAll(_loggingTasks);
+                _loggingTasks.Clear();
             }
         }
 
