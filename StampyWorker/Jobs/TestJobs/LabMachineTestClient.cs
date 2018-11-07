@@ -137,6 +137,7 @@ namespace StampyWorker.Jobs
                     AddAdditionalParameters(testName, baseParameters);
                     return baseParameters;
                 case LabAddress.ExpressStressBase:
+                    baseParameters["TestConfigName"] = $@"\\AntaresDeployment\PublicLockBox\{_args.CloudName}geo\TestCommon.dll.config";
                     return baseParameters;
                 default:
                     throw new Exception($"Cannot find parameter matching for lab address {labMachineAddress}");
