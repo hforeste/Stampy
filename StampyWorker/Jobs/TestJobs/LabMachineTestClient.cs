@@ -136,8 +136,10 @@ namespace StampyWorker.Jobs
                     baseParameters.Add("Categories", ConvertToLabMachineTestCategory(testName));
                     AddAdditionalParameters(testName, baseParameters);
                     return baseParameters;
+                case LabAddress.ExpressStressBase:
+                    return baseParameters;
                 default:
-                    throw new Exception($"Cannot find parameter matching for lab adderss {labMachineAddress}");
+                    throw new Exception($"Cannot find parameter matching for lab address {labMachineAddress}");
             }
         }
 
