@@ -30,7 +30,7 @@ namespace StampyWorker.Jobs
         public string ReportUri { get; set; }
         public Task<bool> Cancel()
         {
-            throw new NotImplementedException();
+            return Task.FromResult(true);
         }
 
         public Task<JobResult> Execute()

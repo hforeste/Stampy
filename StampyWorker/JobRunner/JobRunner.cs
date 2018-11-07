@@ -164,7 +164,7 @@ namespace StampyWorker
 
                             //test should timeout after 180 minutes. 
                             //TODO double check if function runtime has default timeout
-                            resultTasks.Add(ExecuteJob(testJob, StampyJobType.Test, TimeSpan.FromMinutes(180)));
+                            resultTasks.Add(ExecuteJob(testJob, StampyJobType.Test, TimeSpan.FromHours(5)));
                         }
 
                         var testCategoryResults = await Task.WhenAll(resultTasks);

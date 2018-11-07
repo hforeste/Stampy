@@ -26,7 +26,7 @@ namespace StampyWorker.Jobs
 
         public Task<bool> Cancel()
         {
-            throw new NotImplementedException();
+            return Task.FromResult(true);
         }
 
         public async Task<JobResult> Execute()
@@ -62,6 +62,7 @@ namespace StampyWorker.Jobs
             }
 
             var testClient = TestClientFactory.GetTestClient(_logger, _args);
+            _logger.WriteInfo(_args, $"Execute {_args.TestCategories[0].First()} tests");
             var jResult = await JobStatusHelper.StartPeriodicStatusUpdates(this, (IJob)testClient, testClient.ExecuteTestAsync(_args.TestCategories[0].First()));
             return jResult;
         }

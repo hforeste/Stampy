@@ -101,7 +101,6 @@ namespace StampyWorker.Utilities
                         doc.LoadXml(xmlResult);
                         XmlNodeList bss = doc.GetElementsByTagName("BuildPath");
                         string buildShare = bss[0].InnerText;
-
                         result.ResultDetails.Add("Build Share", buildShare);
                         return result;
                     }

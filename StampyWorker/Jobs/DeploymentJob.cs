@@ -119,7 +119,7 @@ namespace StampyWorker.Jobs
 
         public Task<bool> Cancel()
         {
-            return Task.FromResult(false);
+            return Task.FromResult(true);
         }
 
         private async Task CopyToAzureFileShareAsync(string localFilePath)
