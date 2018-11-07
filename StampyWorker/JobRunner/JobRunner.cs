@@ -229,7 +229,7 @@ namespace StampyWorker
             var queueClient = storageAccount.CreateCloudQueueClient();
             var finishedDeploymentJobs = queueClient.GetQueueReference("finished-deployment-jobs");
             var testJobsQueue = queueClient.GetQueueReference("test-jobs");
-
+            var generalOperationContext = new OperationContext();
             var jobsPerRequest = new Dictionary<string, List<CloudQueueMessage>>();
 
             var queueMessages = await finishedDeploymentJobs.GetMessagesAsync(32, TimeSpan.FromSeconds(10), null, null);
@@ -237,6 +237,18 @@ namespace StampyWorker
             foreach (var message in queueMessages)
             {
                 var stampyJob = JsonConvert.DeserializeObject<CloudStampyParameters>(message.AsString);
+
+                if ((stampyJob.JobType & StampyJobType.Deploy) != StampyJobType.Deploy)
+                {
+                    //note: don't use the same CloudQueueMessage object dequeued from one queue and enqueued in another and try to delete. As this will change the original message id and pop receipt
+                    //and cause a 404
+                    await testJobsQueue.AddMessageAsync(new CloudQueueMessage(stampyJob.ToJsonString()), null, null, null, generalOperationContext);
+                    if (generalOperationContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
+                    {
+                        await finishedDeploymentJobs.DeleteMessageAsync(message);
+                    }
+                    continue;
+                }
 
                 List<CloudQueueMessage> parameters;
 
@@ -255,7 +267,6 @@ namespace StampyWorker
                     jobsPerRequest[stampyJob.RequestId] = parameters;
                 }
 
-                var generalOperationContext = new OperationContext();
                 //if both geomaster and stamp deployment jobs are done then send a job to the TestBuild function
                 if (parameters.Count == 2)
                 {
@@ -286,15 +297,6 @@ namespace StampyWorker
                     else
                     {
                         eventsLogger.WriteError($"Failed to add job to {testJobsQueue.Name}. Storage Status Code: {generalOperationContext.LastResult.HttpStatusCode}-{generalOperationContext.LastResult.HttpStatusMessage}", generalOperationContext.LastResult.Exception);
-                    }
-                }
-                //if the job didn't require a deployment then don't wait
-                else if ((stampyJob.JobType & StampyJobType.Deploy) != StampyJobType.Deploy)
-                {
-                    await testJobsQueue.AddMessageAsync(message, null, null, null, generalOperationContext);
-                    if (generalOperationContext.LastResult.HttpStatusCode == (int)HttpStatusCode.Created)
-                    {
-                        await finishedDeploymentJobs.DeleteMessageAsync(message, null, generalOperationContext);
                     }
                 }
             }
