@@ -34,7 +34,7 @@ namespace StampyWorker.Jobs
             var buildClient = BuildClientFactory.GetBuildClient(_logger, _args);
             var jResult = await JobStatusHelper.StartPeriodicStatusUpdates(this, (IJob)buildClient, buildClient.ExecuteBuild());
             object buildPath = null;
-            if (jResult.ResultDetails.TryGetValue("Build Path", out buildPath))
+            if (jResult.ResultDetails.TryGetValue("Build Share", out buildPath))
             {
                 _logger.WriteInfo(_args, $"Finished executing build at {(string)buildPath}");
             }
