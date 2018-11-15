@@ -11,56 +11,31 @@ using System.Xml;
 
 namespace StampyWorker.Jobs
 {
-    internal class ServiceCreationJob : IJob
+    internal class ServiceCreationJob : AntaresDeploymentBaseJob
     {
-        ICloudStampyLogger _logger;
-        CloudStampyParameters _parameters;
-        private StringBuilder _statusMessageBuilder;
-        private JobResult _result;
+        public ServiceCreationJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs) : base(logger, cloudStampyArgs) { }
 
-        public ServiceCreationJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
+        protected override void PreExecute()
         {
-            _logger = logger;
-            _result = new JobResult();
-            _parameters = cloudStampyArgs;
-            _statusMessageBuilder = new StringBuilder();
+            //no op
         }
 
-        public Status JobStatus { get; set; }
-        public string ReportUri { get; set; }
-        public Task<bool> Cancel()
+        protected override List<AntaresDeploymentTask> GetAntaresDeploymentTasks()
         {
-            return Task.FromResult(true);
+            var commands = new List<AntaresDeploymentTask>()
+            {
+                new AntaresDeploymentTask
+                {
+                    Name = "Create Private Stamp and Geomaster",
+                    Description = string.Empty,
+                    AntaresDeploymentExcutableParameters = $"SetupPrivateStampWithGeo {_parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /VirtualDedicated:true /bvtCapableStamp:true /DefaultLocation:\"Central US\""
+                }
+            };
+            return commands;
         }
 
-        public Task<JobResult> Execute()
+        protected override void PostExecute()
         {
-            if (!File.Exists(AntaresDeploymentExecutablePath))
-            {
-                var ex = new FileNotFoundException("Cannot find file", Path.GetFileName(AntaresDeploymentExecutablePath));
-                _logger.WriteError(_parameters, "Cannot find file", ex);
-                throw ex;
-            }
-
-            var processStartInfo = new ProcessStartInfo();
-            processStartInfo.FileName = AntaresDeploymentExecutablePath;
-            processStartInfo.Arguments = $"SetupPrivateStampWithGeo {_parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /VirtualDedicated:true /bvtCapableStamp:true /DefaultLocation:\"Central US\"";
-            processStartInfo.UseShellExecute = false;
-            processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-            processStartInfo.RedirectStandardError = true;
-            processStartInfo.RedirectStandardOutput = true;
-
-            _logger.WriteInfo(_parameters, $"Start {processStartInfo.FileName} {processStartInfo.Arguments}");
-
-            using (var createProcess = Process.Start(processStartInfo))
-            {
-                createProcess.BeginErrorReadLine();
-                createProcess.BeginOutputReadLine();
-                createProcess.OutputDataReceived += new DataReceivedEventHandler(OutputReceived);
-                createProcess.ErrorDataReceived += new DataReceivedEventHandler(ErrorReceived);
-                createProcess.WaitForExit();
-            }
-
             var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{_parameters.CloudName}\developer.definitions";
             var cloudStampyFirewallRules =
 @"
@@ -68,47 +43,7 @@ namespace StampyWorker.Jobs
 ";
             if (!TryModifyDefinitions(definitionsPath, cloudStampyFirewallRules))
             {
-                _statusMessageBuilder.AppendLine("Failed to add cloud stampy firewall rules to developer.definitions file.");
-                _result.JobStatus = Status.Failed;
-            }
-
-            _result.Message = _statusMessageBuilder.ToString();
-            _result.JobStatus = JobStatus = _result.JobStatus == Status.None ? Status.Passed : _result.JobStatus;
-            return Task.FromResult(_result);
-        }
-
-        private void OutputReceived(object sender, DataReceivedEventArgs e)
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-            {
-                if (JobStatus == default(Status))
-                {
-                    JobStatus = Status.InProgress;
-                }
-
-                _logger.WriteInfo(_parameters, e.Data);
-                if (e.Data.Contains("<ERROR>") || e.Data.Contains("<Exception>") || e.Data.Contains("Error:"))
-                {
-                    _statusMessageBuilder.AppendLine(e.Data);
-                    _result.JobStatus = JobStatus = Status.Failed;
-                }
-            }
-        }
-
-        private void ErrorReceived(object sender, DataReceivedEventArgs e)
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-            {
-                _statusMessageBuilder.AppendLine(e.Data);
-                _result.JobStatus = JobStatus = Status.Failed;
-            }
-        }
-
-        private string AntaresDeploymentExecutablePath
-        {
-            get
-            {
-                return Path.Combine(_parameters.BuildPath, @"hosting\Azure\RDTools\Tools\Antares\AntaresDeployment.exe");
+                throw new Exception("Failed to add cloud stampy firewall rules to developer.definitions file.");
             }
         }
 
