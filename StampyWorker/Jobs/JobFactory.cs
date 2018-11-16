@@ -30,6 +30,9 @@ namespace StampyWorker
                 case StampyJobType.Test:
                     job = new TestJob(logger, args);
                     break;
+                case StampyJobType.RemoveResources:
+                    job = new ScavengerJob(logger, args);
+                    break;
                 default:
                     break;
             }

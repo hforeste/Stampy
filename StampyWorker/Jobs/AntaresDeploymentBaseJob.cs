@@ -12,8 +12,8 @@ namespace StampyWorker.Jobs
 {
     public abstract class AntaresDeploymentBaseJob : IJob
     {
+        protected CloudStampyParameters Parameters { get; set; }
         private ICloudStampyLogger _logger;
-        private CloudStampyParameters _parameters;
         private StringBuilder _statusMessageBuilder;
         private JobResult _result;
 
@@ -25,7 +25,7 @@ namespace StampyWorker.Jobs
         {
             _logger = logger;
             _result = new JobResult();
-            _parameters = cloudStampyArgs;
+            Parameters = cloudStampyArgs;
             _statusMessageBuilder = new StringBuilder();
         }
 
@@ -44,7 +44,7 @@ namespace StampyWorker.Jobs
             if (!File.Exists(AntaresDeploymentExecutablePath))
             {
                 var ex = new FileNotFoundException("Cannot find file", Path.GetFileName(AntaresDeploymentExecutablePath));
-                _logger.WriteError(_parameters, "Cannot find file", ex);
+                _logger.WriteError(Parameters, "Cannot find file", ex);
                 throw ex;
             }
 
@@ -59,9 +59,9 @@ namespace StampyWorker.Jobs
 
             foreach (var task in tasks)
             {
-                _logger.WriteInfo(_parameters, $"Executing task {task.Name} - {task.Description}");
+                _logger.WriteInfo(Parameters, $"Executing task {task.Name} - {task.Description}");
                 processStartInfo.Arguments = task.AntaresDeploymentExcutableParameters;
-                _logger.WriteInfo(_parameters, $"Start {processStartInfo.FileName} {processStartInfo.Arguments}");
+                _logger.WriteInfo(Parameters, $"Start {processStartInfo.FileName} {processStartInfo.Arguments}");
 
                 using (var p = Process.Start(processStartInfo))
                 {
@@ -89,7 +89,7 @@ namespace StampyWorker.Jobs
                     JobStatus = Status.InProgress;
                 }
 
-                _logger.WriteInfo(_parameters, e.Data);
+                _logger.WriteInfo(Parameters, e.Data);
                 if (e.Data.Contains("<ERROR>") || e.Data.Contains("<Exception>") || e.Data.Contains("Error:"))
                 {
                     _statusMessageBuilder.AppendLine(e.Data);
@@ -111,7 +111,7 @@ namespace StampyWorker.Jobs
         {
             get
             {
-                return Path.Combine(_parameters.BuildPath, @"hosting\Azure\RDTools\Tools\Antares\AntaresDeployment.exe");
+                return Path.Combine(Parameters.BuildPath, @"hosting\Azure\RDTools\Tools\Antares\AntaresDeployment.exe");
             }
         }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,80 +10,72 @@ using StampyCommon.Models;
 
 namespace StampyWorker.Jobs
 {
-    class ScavengerJob : IJob
+    internal class ScavengerJob : AntaresDeploymentBaseJob
     {
-        private ICloudStampyLogger _logger;
-        private JobResult _result;
-        private CloudStampyParameters _parameters;
-        private StringBuilder _statusMessageBuilder;
+        private string _subscriptionId;
 
-        public Status JobStatus { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public string ReportUri { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-
-        public ScavengerJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
+        private List<AntaresDeploymentTask> _commands;
+        public ScavengerJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs) : base(logger, cloudStampyArgs)
         {
-            _logger = logger;
-            _result = new JobResult();
-            _parameters = cloudStampyArgs;
-            _statusMessageBuilder = new StringBuilder();
         }
 
-        public Task<bool> Cancel()
+        protected override List<AntaresDeploymentTask> GetAntaresDeploymentTasks()
         {
-            throw new NotImplementedException();
-        }
-
-        public Task<JobResult> Execute()
-        {
-            var definitionsPath = Path.Combine($@"\\AntaresDeployment\PublicLockBox\{_parameters.CloudName}\developer.definitions");
-            if (File.Exists(definitionsPath))
+            return new List<AntaresDeploymentTask>
             {
-                string definitions = File.ReadAllText(definitionsPath);
-                if (definitions.Contains(@"<redefine name=""VNET.Enabled"" value=""true"" />"))
+                new AntaresDeploymentTask
                 {
+                    Name = "Delete Resources",
+                    Description = "Remove all resources corresponding to this cloud service",
+                    AntaresDeploymentExcutableParameters = $@"DeletePrivateEnvironment {Parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /deleteLockBoxFiles:true /deleteSecretStore:true"
+                }
+            };
+        }
 
+        protected override void PostExecute()
+        {
+            //no op
+        }
+
+        protected override void PreExecute()
+        {
+            var branchDirectory = @"\\reddog\builds\branches\rd_websites_n_release\";
+            var nBuild = Path.Combine(branchDirectory, GetLatestBuild(branchDirectory), "bin");
+            Parameters.BuildPath = nBuild;
+        }
+
+        private string GetLatestBuild(string branch)
+        {
+            var di = new DirectoryInfo(branch);
+            List<DirectoryInfo> rdWebsites = di.EnumerateDirectories()
+                .OrderBy(d => d.CreationTime)
+                .Reverse()
+                .ToList();
+
+            var dirs = new Dictionary<int, DirectoryInfo>();
+            foreach (var dir in rdWebsites)
+            {
+                string name = dir.Name;
+                string[] number = name.Split('.');
+                if (number.Length > 2)
+                {
+                    if (!dirs.ContainsKey(Int32.Parse(number[3])))
+                        dirs.Add(Int32.Parse(number[3]), dir);
+                    else
+
+                        Console.WriteLine(number[3]);
                 }
             }
-        }
 
-        private Task GeoMasterDeletion()
-        {
-            if (true)
-            {
+            var sortedList = dirs.Keys.OrderBy(d => d)
+                .Reverse()
+                .ToList();
 
-            }
-        }
+            if (DateTime.Now.Subtract(dirs[sortedList[0]].CreationTime).TotalMinutes > 20)
+                return dirs[sortedList[0]].Name;
 
-        private Task StampDeletion()
-        {
-
-        }
-
-        private void OutputReceived(object sender, DataReceivedEventArgs e)
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-            {
-                if (JobStatus == default(Status))
-                {
-                    JobStatus = Status.InProgress;
-                }
-
-                _logger.WriteInfo(_parameters, e.Data);
-                if (e.Data.Contains("<ERROR>") || e.Data.Contains("<Exception>") || e.Data.Contains("Error:"))
-                {
-                    _statusMessageBuilder.AppendLine(e.Data);
-                    _result.JobStatus = JobStatus = Status.Failed;
-                }
-            }
-        }
-
-        private void ErrorReceived(object sender, DataReceivedEventArgs e)
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-            {
-                _statusMessageBuilder.AppendLine(e.Data);
-                _result.JobStatus = JobStatus = Status.Failed;
-            }
+            Console.WriteLine("Folder is there but not ready");
+            return dirs[sortedList[1]].Name;
         }
     }
 }

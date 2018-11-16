@@ -12,6 +12,7 @@ using Newtonsoft.Json;
 using StampyCommon;
 using StampyCommon.Loggers;
 using StampyCommon.Models;
+using StampyWorker.Exceptions;
 using StampyWorker.Utilities;
 
 namespace StampyWorker
@@ -186,11 +187,13 @@ namespace StampyWorker
         }
 
         [FunctionName("ResourceCleaner")]
-        public static async Task RemoveResources([TimerTrigger("0 */10 * * * *")]TimerInfo timer)
+        public static async Task RemoveResources([TimerTrigger("0 */1 * * * *")]TimerInfo timer)
         {
             var storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("StampyStorageConnectionString"));
             var queueClient = storageAccount.CreateCloudQueueClient();
             var queue = queueClient.GetQueueReference("stampy-jobs-finished");
+            var deletionJobs = new List<Task>();
+
             List<CloudQueueMessage> messages = new List<CloudQueueMessage>();
 
             int? messageCount;
@@ -199,7 +202,7 @@ namespace StampyWorker
             {
                 await queue.FetchAttributesAsync();
                 messageCount = queue.ApproximateMessageCount;
-                var queueMessages = await queue.GetMessagesAsync(32);
+                var queueMessages = await queue.GetMessagesAsync(32, TimeSpan.FromMinutes(30), null, null);
                 foreach (var message in queueMessages)
                 {
                     if (!messages.Any(m => m.Id == message.Id))
@@ -211,13 +214,41 @@ namespace StampyWorker
                 tries++;
             } while (messageCount.HasValue && messages.Count < messageCount.GetValueOrDefault() && tries < 3);
 
+
             foreach (var message in messages)
             {
                 var stampyJob = JsonConvert.DeserializeObject<CloudStampyParameters>(message.AsString);
-                if (DateTime.Parse(stampyJob.ExpiryDate) >= DateTime.UtcNow)
+                if ((DateTime.TryParse(stampyJob.ExpiryDate, out DateTime jobExpirationDate) && jobExpirationDate <= DateTime.UtcNow) || string.IsNullOrWhiteSpace(stampyJob.ExpiryDate))
                 {
-                    //await queue.DeleteMessageAsync(message);
-                    //TODO delete resources
+                    deletionJobs.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var result = await ExecuteJob(stampyJob, StampyJobType.RemoveResources, TimeSpan.FromMinutes(30));
+                                if (result.JobStatus == Status.Passed)
+                                {
+                                    await queue.DeleteMessageAsync(message);
+                                }
+                                else
+                                {
+                                    eventsLogger.WriteInfo(stampyJob, "Will not delete queue message since resource deletion failed");
+                                }
+                            }catch(JobExecutionException)
+                            {
+                                eventsLogger.WriteInfo(stampyJob, "Will not delete queue message since resource deletion failed");
+                            }catch(Exception ex)
+                            {
+                                eventsLogger.WriteError(stampyJob, $"Failed to delete queue message from Azure Queue. MessageId: {message.Id} PopReceipt: {message.PopReceipt} Delete Attempts: {message.DequeueCount}", ex);
+                            }
+                        }
+                    ));
+
+                    if (deletionJobs.Count >= 1)
+                    {
+                        await Task.WhenAll(deletionJobs);
+                    }
+
+                    deletionJobs.Clear();
                 }
             }
         }
@@ -360,7 +391,7 @@ namespace StampyWorker
                     jobException = ex;
                     jobResult = new JobResult { JobStatus = Status.Failed };
                     eventsLogger.WriteError(queueItem, "Error while running job", ex);
-                    throw;
+                    throw new JobExecutionException(job.GetType().Name, "Error while running job", ex);
                 }
                 finally
                 {

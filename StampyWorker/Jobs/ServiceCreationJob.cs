@@ -1,13 +1,8 @@
-﻿using StampyCommon;
-using StampyCommon.Models;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Xml;
+using StampyCommon;
 
 namespace StampyWorker.Jobs
 {
@@ -28,7 +23,7 @@ namespace StampyWorker.Jobs
                 {
                     Name = "Create Private Stamp and Geomaster",
                     Description = string.Empty,
-                    AntaresDeploymentExcutableParameters = $"SetupPrivateStampWithGeo {_parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /VirtualDedicated:true /bvtCapableStamp:true /DefaultLocation:\"Central US\""
+                    AntaresDeploymentExcutableParameters = $"SetupPrivateStampWithGeo {Parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /VirtualDedicated:true /bvtCapableStamp:true /DefaultLocation:\"Central US\""
                 }
             };
             return commands;
@@ -36,7 +31,7 @@ namespace StampyWorker.Jobs
 
         protected override void PostExecute()
         {
-            var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{_parameters.CloudName}\developer.definitions";
+            var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{Parameters.CloudName}\developer.definitions";
             var cloudStampyFirewallRules =
 @"
 <redefine name=""SqlFirewallAddressRangesList"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24"" /><redefine name=""FirewallLockdownWhitelistedSources"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24"" />
@@ -83,8 +78,7 @@ namespace StampyWorker.Jobs
             }
             catch (Exception ex)
             {
-                _logger.WriteError(_parameters, "Failed to modify definitions file", ex);
-                return false;
+                throw new Exception("Failed to modify definitions file", ex);
             }
 
 
