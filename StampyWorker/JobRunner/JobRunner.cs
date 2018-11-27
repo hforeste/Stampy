@@ -243,7 +243,7 @@ namespace StampyWorker
                         }
                     ));
 
-                    if (deletionJobs.Count >= 1)
+                    if (deletionJobs.Count >= 5)
                     {
                         await Task.WhenAll(deletionJobs);
                     }
