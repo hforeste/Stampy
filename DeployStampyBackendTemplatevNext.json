@@ -83,6 +83,9 @@
     },
     "kustoSecret" : {
       "type": "securestring"
+    },
+    "imageName" : {
+      "type": "string"
     }
   },
   "variables": {
@@ -110,10 +113,7 @@
               "caching": "ReadWrite"
             },
             "imageReference": {
-              "publisher": "MicrosoftWindowsServer",
-              "offer": "WindowsServer",
-              "sku": "2016-Datacenter",
-              "version": "latest"
+              "id":"[resourceId('Microsoft.Compute/images', parameters('imageName'))]"
             }
           },
           "osProfile": {
@@ -134,9 +134,9 @@
                 "autoUpgradeMinorVersion": false,    
                 "settings": {    
                   "fileUris": [
-                    "https://stampyvmssmgmt97d3dev.blob.core.windows.net/machine-setup/bootstrapper.zip",
-                    "https://stampyvmssmgmt97d3dev.blob.core.windows.net/machine-setup/CloudStampy.zip",
-                    "https://stampyvmssmgmt97d3dev.blob.core.windows.net/machine-setup/Setup.ps1"
+                  "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/bootstrapper.zip')]",
+                  "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/CloudStampy.zip')]",
+                  "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/Setup.ps1')]"
                   ]   
                 },    
                 "protectedSettings": {    
