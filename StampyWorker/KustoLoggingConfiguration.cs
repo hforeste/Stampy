@@ -9,7 +9,7 @@ namespace StampyWorker
 {
     internal class LoggingConfiguration : IConfiguration
     {
-        public string StorageAccountConnectionString => throw new NotImplementedException();
+        public string StorageAccountConnectionString => Environment.GetEnvironmentVariable("StampyStorageConnectionString");
 
         public string StampyJobPendingQueueName => throw new NotImplementedException();
 
