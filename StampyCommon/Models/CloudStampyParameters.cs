@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace StampyCommon
 {
-    public class CloudStampyParameters
+    public sealed class CloudStampyParameters
     {
         public string RequestId { get; set; }
         public string JobId { get; set; }

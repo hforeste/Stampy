@@ -1,14 +1,13 @@
-﻿using AutomationUnit.Client;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using System.Xml;
+using AutomationUnit.Client;
 using AutomationUnit.DataModel;
 using StampyCommon;
 using StampyCommon.Models;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml;
+using StampyWorker.Jobs;
 
 namespace StampyWorker.Utilities
 {
@@ -112,6 +111,11 @@ namespace StampyWorker.Utilities
             {
                 throw new Exception("Failed to submit build task to lab machines");
             }
+        }
+
+        public Task<JobResult> ExecuteBuild(CloudStampyParameters p)
+        {
+            throw new NotImplementedException();
         }
     }
 }
