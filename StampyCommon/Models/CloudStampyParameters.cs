@@ -11,6 +11,7 @@ namespace StampyCommon
         public StampyJobType JobType { get; set; }
         public string BuildPath { get; set; }
         public string DpkPath { get; set; }
+        public string GitBranchName { get; set; }
         public string DeploymentTemplate { get; set; }
         public string CloudName { get; set; }
         public List<List<string>> TestCategories { get; set; }

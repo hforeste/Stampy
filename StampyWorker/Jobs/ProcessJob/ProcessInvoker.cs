@@ -42,7 +42,7 @@ namespace StampyWorker.Jobs
 
             var processStartInfo = new ProcessStartInfo();
             processStartInfo.FileName = action.ProgramPath;
-            processStartInfo.Arguments = string.Join(" ", action.Arguments.Select(a => a.ToString()));
+            processStartInfo.Arguments = action.Arguments != null ? string.Join(" ", action.Arguments.Select(a => a.ToString())) : null;
             processStartInfo.UseShellExecute = false;
             processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
             processStartInfo.RedirectStandardError = true;

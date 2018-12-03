@@ -9,7 +9,7 @@ using StampyCommon;
 using StampyCommon.Models;
 using StampyWorker.Jobs;
 
-namespace StampyWorker.Utilities
+namespace StampyWorker.Jobs.BuildJobs
 {
     internal class LabMachineBuildClient : IBuildClient, IJob
     {
