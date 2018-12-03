@@ -45,10 +45,10 @@ namespace StampyWorker.Jobs.BuildJobs
         public async Task<JobResult> Execute()
         {
             JobStatus = Status.Queued;
-            return await ExecuteBuild(_args);
+            return await ExecuteBuild();
         }
 
-        public async Task<JobResult> ExecuteBuild(CloudStampyParameters p)
+        public async Task<JobResult> ExecuteBuild(string dpkPath = null)
         {
             var jobResult = new JobResult();
 
@@ -91,11 +91,6 @@ namespace StampyWorker.Jobs.BuildJobs
             }
 
             return jobResult;
-        }
-
-        public Task<JobResult> ExecuteBuild(string dpkPath = null)
-        {
-            throw new InvalidOperationException("DpkPath does not apply to Onebranch building");
         }
     }
 }

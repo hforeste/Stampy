@@ -21,7 +21,7 @@ namespace StampyWorker.Jobs
             _logger = logger;
             _args = cloudStampyArgs;
 
-            if (string.IsNullOrWhiteSpace(_args.DpkPath))
+            if (!string.IsNullOrWhiteSpace(_args.DpkPath))
             {
                 _buildClient = new LabMachineBuildClient(_logger, _args);
             }

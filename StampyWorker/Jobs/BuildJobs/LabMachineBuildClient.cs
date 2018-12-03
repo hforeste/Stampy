@@ -112,10 +112,5 @@ namespace StampyWorker.Jobs.BuildJobs
                 throw new Exception("Failed to submit build task to lab machines");
             }
         }
-
-        public Task<JobResult> ExecuteBuild(CloudStampyParameters p)
-        {
-            throw new NotImplementedException();
-        }
     }
 }
