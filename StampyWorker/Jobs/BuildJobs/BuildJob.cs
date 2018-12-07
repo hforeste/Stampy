@@ -31,8 +31,8 @@ namespace StampyWorker.Jobs
             }
         }
 
-        public Status JobStatus { get; set; }
-        public string ReportUri { get; set; }
+        public Status JobStatus { get { return (_buildClient as IJob).JobStatus; } set { } }
+        public string ReportUri { get { return (_buildClient as IJob).ReportUri; } set { } }
 
         public Task<bool> Cancel()
         {
@@ -42,7 +42,8 @@ namespace StampyWorker.Jobs
 
         public async Task<JobResult> Execute()
         {
-            var jResult = await JobStatusHelper.StartPeriodicStatusUpdates(this, (IJob)_buildClient, _buildClient.ExecuteBuild());
+            var job = (IJob)_buildClient;
+            var jResult = await job.Execute();
             object buildPath = null;
             if (jResult.ResultDetails.TryGetValue("Build Share", out buildPath))
             {

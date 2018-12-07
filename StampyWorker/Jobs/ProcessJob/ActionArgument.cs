@@ -17,10 +17,10 @@
             _actionArgumentToStringResponse = $"{ParameterName}{middleExpression}{Value}";
         }
 
-        public ActionArgument(string switchSymbol)
+        public ActionArgument(string parameter)
         {
-            Switch = switchSymbol;
-            _actionArgumentToStringResponse = Switch;
+            Value = parameter;
+            _actionArgumentToStringResponse = parameter;
         }
 
         public ActionArgument(string switchSymbol, string value)
