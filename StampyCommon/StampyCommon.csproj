@@ -93,6 +93,7 @@
     <Compile Include="Interfaces\IStampyClientLogger.cs" />
     <Compile Include="Interfaces\IStampyContext.cs" />
     <Compile Include="Interfaces\IStampyResultsLogger.cs" />
+    <Compile Include="Loggers\AzureFileLogger.cs" />
     <Compile Include="Loggers\CsvFileLogger.cs" />
     <Compile Include="Loggers\FileLogger.cs" />
     <Compile Include="Loggers\ITableLogger.cs" />

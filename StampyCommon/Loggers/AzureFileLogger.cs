@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -11,35 +12,50 @@ namespace StampyCommon.Loggers
 {
     public sealed class AzureFileLogger
     {
-        private List<Task> _loggingTasks;
+        private ConcurrentQueue<Task> _loggingTasks;
         private ICloudStampyLogger _kustoLogger;
         private CloudStampyParameters _parameters;
         private IConfiguration _configuration;
+        private ConcurrentQueue<string> _requests;
 
         public AzureFileLogger(IConfiguration configuration, CloudStampyParameters p, ICloudStampyLogger logger)
         {
-            _loggingTasks = new List<Task>();
+            _loggingTasks = new ConcurrentQueue<Task>();
             _kustoLogger = logger;
             _parameters = p;
+            _configuration = configuration;
+            _requests = new ConcurrentQueue<string>();
         }
 
         public string AzureFileUri { get; private set; }
 
         public async Task CreateLogIfNotExistAppendAsync(string path, string content)
         {
-
+            _requests.Enqueue(content);
             if (_loggingTasks.All(t => t.IsCompleted) || !_loggingTasks.Any())
             {
-                if (!string.IsNullOrWhiteSpace(content))
+                StringBuilder logBuilder = new StringBuilder();
+                while (_requests.Any())
                 {
-                    _loggingTasks.Add(CreateIfNotExistAppendAsync(path, content));
+                    if (_requests.TryDequeue(out string log))
+                    {
+                        logBuilder.AppendLine(log);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(logBuilder.ToString()))
+                {
+                    _loggingTasks.Enqueue(CreateIfNotExistAppendAsync(path, logBuilder.ToString()));
                 }
             }
             else
             {
-                _kustoLogger.WriteInfo(_parameters, "Waiting on writing logs to azure file");
+                if (_requests.Count > 50)
+                {
+                    _kustoLogger.WriteInfo(_parameters, $"Waiting on writing logs to azure file. {_requests.Count} log lines pending to write");
+                }
                 await Task.WhenAll(_loggingTasks);
-                _loggingTasks.Clear();
+                _loggingTasks.TryDequeue(out Task doneTask);
             }
         }
 

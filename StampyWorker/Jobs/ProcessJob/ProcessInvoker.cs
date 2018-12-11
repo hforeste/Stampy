@@ -13,17 +13,15 @@ namespace StampyWorker.Jobs
     internal static class ProcessInvoker
     {
         private static ConcurrentDictionary<Guid, Process> _runningProcesses;
-        public static Task Start(List<ProcessAction> actions, Action<string, bool> outputDelegate, CancellationToken? cancelToken)
+        public static async Task Start(List<ProcessAction> actions, Action<string, bool> outputDelegate, CancellationToken? cancelToken)
         {
             foreach (var action in actions)
             {
-                Start(action, outputDelegate, cancelToken);
+                await Start(action, outputDelegate, cancelToken);
             }
-
-            return null;
         }
 
-        public static Task Start(ProcessAction action, Action<string, bool> outputDelegate, CancellationToken? cancelToken = null)
+        public static async Task Start(ProcessAction action, Action<string, bool> outputDelegate, CancellationToken? cancelToken = null)
         {
             if (string.IsNullOrWhiteSpace(action.ProgramPath))
             {
@@ -61,30 +59,12 @@ namespace StampyWorker.Jobs
                     throw new Exception("Could not persist process to memory");
                 }
 
-                if (cancelToken.HasValue)
+                //wait idenfinitely for the process to finish
+                while (!p.HasExited)
                 {
-                    CancellationToken token = cancelToken.GetValueOrDefault();
-
-                    while (true)
-                    {
-                        if (token.IsCancellationRequested)
-                        {
-                            p.CancelErrorRead();
-                            p.CancelOutputRead();
-                            p.Kill();
-                            return Task.FromCanceled(token);
-                        }
-                        p.WaitForExit(5000);
-                    }
-                }
-                else
-                {
-                    //wait idenfinitely for the process to finish
-                    p.WaitForExit();
+                    await Task.Delay(10 * 1000);
                 }
             }
-
-            return null;
         }
 
         public static bool TryCancel(List<ProcessAction> actions)
