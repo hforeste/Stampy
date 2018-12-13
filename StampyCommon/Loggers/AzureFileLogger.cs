@@ -25,9 +25,12 @@ namespace StampyCommon.Loggers
             _parameters = p;
             _configuration = configuration;
             _requests = new ConcurrentQueue<string>();
+            LogUrls = new Dictionary<string, string>();
         }
 
         public string AzureFileUri { get; private set; }
+
+        public Dictionary<string, string> LogUrls { get; private set; }
 
         public async Task CreateLogIfNotExistAppendAsync(string path, string content)
         {
@@ -50,10 +53,6 @@ namespace StampyCommon.Loggers
             }
             else
             {
-                if (_requests.Count > 50)
-                {
-                    _kustoLogger.WriteInfo(_parameters, $"Waiting on writing logs to azure file. {_requests.Count} log lines pending to write");
-                }
                 await Task.WhenAll(_loggingTasks);
                 _loggingTasks.TryDequeue(out Task doneTask);
             }
@@ -99,21 +98,22 @@ namespace StampyCommon.Loggers
                     await fileStream.WriteAsync(buffer, 0, buffer.Length);
                 }
 
-                if (string.IsNullOrWhiteSpace(AzureFileUri))
+                SharedAccessFilePolicy sharedPolicy = new SharedAccessFilePolicy()
                 {
-                    SharedAccessFilePolicy sharedPolicy = new SharedAccessFilePolicy()
-                    {
-                        SharedAccessExpiryTime = DateTime.UtcNow.AddMonths(1),
-                        Permissions = SharedAccessFilePermissions.Read
-                    };
+                    SharedAccessExpiryTime = DateTime.UtcNow.AddMonths(1),
+                    Permissions = SharedAccessFilePermissions.Read
+                };
 
+                if (!LogUrls.ContainsKey(path))
+                {
                     var permissions = await fileShare.GetPermissionsAsync(null, null, null);
                     permissions.SharedAccessPolicies.Clear();
                     permissions.SharedAccessPolicies.Add("read", sharedPolicy);
 
                     await fileShare.SetPermissionsAsync(permissions, null, null, null);
 
-                    AzureFileUri = new Uri(fileReference.StorageUri.PrimaryUri.ToString() + fileReference.GetSharedAccessSignature(null, "read")).ToString();
+                    var azureFilesUri = new Uri(fileReference.StorageUri.PrimaryUri.ToString() + fileReference.GetSharedAccessSignature(null, "read")).ToString();
+                    LogUrls.Add(path, azureFilesUri);
                 }
 
             }

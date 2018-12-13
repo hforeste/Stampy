@@ -13,15 +13,25 @@ namespace StampyWorker.Jobs
     internal static class ProcessInvoker
     {
         private static ConcurrentDictionary<Guid, Process> _runningProcesses;
-        public static async Task Start(List<ProcessAction> actions, Action<string, bool> outputDelegate, CancellationToken? cancelToken)
+        public static async Task<Dictionary<ProcessAction, int>> Start(List<ProcessAction> actions, Action<string, bool> outputDelegate, CancellationToken? cancelToken)
         {
+            Dictionary<ProcessAction, int> exitCodes = new Dictionary<ProcessAction, int>();
             foreach (var action in actions)
             {
-                await Start(action, outputDelegate, cancelToken);
+                var exitCode = await Start(action, outputDelegate, cancelToken);
+                exitCodes.Add(action, exitCode);
             }
+
+            return exitCodes;
         }
 
-        public static async Task Start(ProcessAction action, Action<string, bool> outputDelegate, CancellationToken? cancelToken = null)
+        public static async Task<int> Start(string programPath, string arguments, string workingDirectory, Action<string, bool> outputDelegate, CancellationToken? cancelToken = null)
+        {
+            var action = new ProcessAction { ProgramPath = programPath, Arguments = arguments, WorkingDirectory = workingDirectory };
+            return await Start(action, outputDelegate, cancelToken);
+        }
+
+        public static async Task<int> Start(ProcessAction action, Action<string, bool> outputDelegate, CancellationToken? cancelToken = null)
         {
             if (string.IsNullOrWhiteSpace(action.ProgramPath))
             {
@@ -41,7 +51,7 @@ namespace StampyWorker.Jobs
             var processStartInfo = new ProcessStartInfo();
             processStartInfo.FileName = action.ProgramPath;
             processStartInfo.WorkingDirectory = action.WorkingDirectory;
-            processStartInfo.Arguments = action.Arguments != null ? string.Join(" ", action.Arguments.Select(a => a.ToString())) : null;
+            processStartInfo.Arguments = action.Arguments;
             processStartInfo.UseShellExecute = false;
             processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
             processStartInfo.RedirectStandardError = true;
@@ -64,6 +74,8 @@ namespace StampyWorker.Jobs
                 {
                     await Task.Delay(10 * 1000);
                 }
+
+                return p.ExitCode;
             }
         }
 

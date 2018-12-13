@@ -1,4 +1,5 @@
 ﻿using StampyCommon;
+using StampyCommon.Loggers;
 using StampyCommon.Models;
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,9 @@ namespace StampyWorker.Jobs
         CloudStampyParameters _parameters;
         private StringBuilder _statusMessageBuilder;
         private JobResult _result;
+        private AzureFileLogger _azureFilesWriter;
+        private List<Task> _azureLogsWriterUnfinishedJobs;
+        private const string LOG_FILE_NAME = "createservice.log";
 
         public ServiceCreationJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
@@ -24,16 +28,28 @@ namespace StampyWorker.Jobs
             _result = new JobResult();
             _parameters = cloudStampyArgs;
             _statusMessageBuilder = new StringBuilder();
+            _azureFilesWriter = new AzureFileLogger(new LoggingConfiguration(), cloudStampyArgs, logger);
+            _azureLogsWriterUnfinishedJobs = new List<Task>();
         }
 
         public Status JobStatus { get; set; }
-        public string ReportUri { get; set; }
+        public string ReportUri
+        {
+            get
+            {
+                _azureFilesWriter.LogUrls.TryGetValue(LOG_FILE_NAME, out string url);
+                return url;
+            }
+            set
+            { }
+        }
+
         public Task<bool> Cancel()
         {
             return Task.FromResult(true);
         }
 
-        public Task<JobResult> Execute()
+        public async Task<JobResult> Execute()
         {
             if (!File.Exists(AntaresDeploymentExecutablePath))
             {
@@ -74,13 +90,15 @@ namespace StampyWorker.Jobs
 
             _result.Message = _statusMessageBuilder.ToString();
             _result.JobStatus = JobStatus = _result.JobStatus == Status.None ? Status.Passed : _result.JobStatus;
-            return Task.FromResult(_result);
+            await Task.WhenAll(_azureLogsWriterUnfinishedJobs);
+            return _result;
         }
 
         private void OutputReceived(object sender, DataReceivedEventArgs e)
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                _azureLogsWriterUnfinishedJobs.Add(_azureFilesWriter.CreateLogIfNotExistAppendAsync(LOG_FILE_NAME, e.Data));
                 if (JobStatus == default(Status))
                 {
                     JobStatus = Status.InProgress;
@@ -99,8 +117,8 @@ namespace StampyWorker.Jobs
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
+                _azureLogsWriterUnfinishedJobs.Add(_azureFilesWriter.CreateLogIfNotExistAppendAsync("createservice.log", e.Data));
                 _statusMessageBuilder.AppendLine(e.Data);
-                _result.JobStatus = JobStatus = Status.Failed;
             }
         }
 

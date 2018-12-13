@@ -15,51 +15,60 @@ namespace StampyWorker.Jobs.BuildJobs
     internal class OneBranchBuildClient : IBuildClient, IJob
     {
         private ICloudStampyLogger _logger;
-        private CloudStampyParameters _args;
-        private ProcessAction _buildAction;
+        private CloudStampyParameters _cloudStampyArgs;
+        private List<ProcessAction> _runningProcess;
         private AzureFileLogger _buildLogsWritter;
         private List<Task> _buildLogsWriterUnfinishedJobs;
+        private string _reportUri;
+        private const string BUILD_LOG = "build-corext.log";
+        private const string MACHINE_LOG = "machine.log";
+        private const string MSBUILD_LOG = "msbuild.log";
 
         public OneBranchBuildClient(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
             _logger = logger;
-            _args = cloudStampyArgs;
-            var buildScript = Path.Combine(Directory.GetParent(Directory.GetParent(Assembly.GetExecutingAssembly().Location).FullName).FullName,"BuildRemote.cmd");
-            _buildAction = new ProcessAction()
-            {
-                WorkingDirectory = Environment.GetEnvironmentVariable("AntaresMainRepoLocation"),
-                ProgramPath = buildScript,
-                Arguments = new List<ActionArgument>()
-                {
-                    new ActionArgument(cloudStampyArgs.GitBranchName)
-                }
-            };
-
+            _cloudStampyArgs = cloudStampyArgs;
             _buildLogsWritter = new AzureFileLogger(new LoggingConfiguration(), cloudStampyArgs, logger);
             _buildLogsWriterUnfinishedJobs = new List<Task>();
+            _runningProcess = new List<ProcessAction>();
         }
 
         public Status JobStatus { get; set; }
-        public string ReportUri { get { return _buildLogsWritter.AzureFileUri; } set { } }
+        public string ReportUri { get { return _reportUri; } set { } }
 
         public Task<bool> Cancel()
         {
-            bool response;
-            if (!(response = ProcessInvoker.TryCancel(_buildAction)))
+            bool response = false;
+            foreach (var item in _runningProcess)
             {
-                //force cancel if can and throw exception
-                ProcessInvoker.Cancel(_buildAction);
-                response = true;
+                if (!(response = ProcessInvoker.TryCancel(item)))
+                {
+                    //force cancel if can and throw exception
+                    ProcessInvoker.Cancel(item);
+                    response = true;
+                }
             }
-
             return Task.FromResult(response);
         }
 
         public async Task<JobResult> Execute()
         {
             JobStatus = Status.Queued;
-            var jResult = await ExecuteBuild();
-            await Task.WhenAll(_buildLogsWriterUnfinishedJobs);
+            JobResult jResult;
+            try
+            {
+                jResult = await ExecuteBuild();
+                JobStatus = jResult.JobStatus;
+
+            }catch(Exception)
+            {
+                throw;
+            }
+            finally
+            {
+                await Task.WhenAll(_buildLogsWriterUnfinishedJobs);
+            }
+
             return jResult;
         }
 
@@ -76,23 +85,64 @@ namespace StampyWorker.Jobs.BuildJobs
             {
                 WorkingDirectory = Environment.GetEnvironmentVariable("AntaresMainRepoLocation"),
                 ProgramPath = @"C:\Program Files\Git\cmd\git.exe",
-                Arguments = new List<ActionArgument>
-                {
-                    new ActionArgument("clean"),
-                    new ActionArgument("-fdx")
-                }
+                Arguments = "clean -fdx"
             };
 
-            await ProcessInvoker.Start(cleanAction, (output, isFailures) =>
+            var syncBranchScript = Path.Combine(Directory.GetParent(Directory.GetParent(Assembly.GetExecutingAssembly().Location).FullName).FullName, "LocalSyncBranch.cmd");
+            var syncBranchAction = new ProcessAction()
+            {
+                WorkingDirectory = Environment.GetEnvironmentVariable("AntaresMainRepoLocation"),
+                ProgramPath = syncBranchScript,
+                Arguments = $"{_cloudStampyArgs.GitBranchName}"
+            };
+
+            var buildAction = new ProcessAction()
+            {
+                WorkingDirectory = Environment.GetEnvironmentVariable("AntaresMainRepoLocation"),
+                ProgramPath = Path.Combine(Environment.GetEnvironmentVariable("AntaresMainRepoLocation"), "build-corext.cmd")
+            };
+
+            var buildDirectoryName = $"{_cloudStampyArgs.GitBranchName.Replace(@"/", "-")}-{DateTime.UtcNow.ToString("yyyyMMddTHHmmss")}";
+            var copyBuildAction = new ProcessAction()
+            {
+                WorkingDirectory = Environment.GetEnvironmentVariable("AntaresMainRepoLocation"),
+                ProgramPath = @"C:\Windows\System32\Robocopy.exe",
+                Arguments = $"out {Path.Combine(Environment.GetEnvironmentVariable("BuildVolume"), $"{buildDirectoryName}")} /MIR"
+            };
+
+            _logger.WriteInfo(_cloudStampyArgs, "Clean the working tree by recursively removing files that are not under version control, starting from the current directory.");
+            int cleanActionExitCode = await ProcessInvoker.Start(cleanAction, (output, isFailures) =>
             {
                 JobStatus = Status.InProgress;
-                _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync("build-logs.txt", output));
+                _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(MACHINE_LOG, output));
+                _buildLogsWritter.LogUrls.TryGetValue(MACHINE_LOG, out _reportUri);
             });
 
-            var buildTask = ProcessInvoker.Start(_buildAction, (output, isFailure) =>
+            if (cleanActionExitCode != 0)
+            {
+                JobStatus = Status.Failed;
+                throw new Exception($"Git clean failed");
+            }
+
+            _logger.WriteInfo(_cloudStampyArgs, $"Fetch the latest changes from {_cloudStampyArgs.GitBranchName} to the local file system");
+            int syncBranchExitCode = await ProcessInvoker.Start(syncBranchAction, (output, isFailure) =>
             {
                 JobStatus = Status.InProgress;
-                _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync("build-logs.txt", output));
+                _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(MACHINE_LOG, output));
+                _buildLogsWritter.LogUrls.TryGetValue(MACHINE_LOG, out _reportUri);
+            });
+
+            if (syncBranchExitCode != 0)
+            {
+                JobStatus = Status.Failed;
+                throw new Exception("Fetch latest changes failed");
+            }
+
+            var buildTask = ProcessInvoker.Start(buildAction, (output, ignore) =>
+            {
+                JobStatus = Status.InProgress;
+                _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(BUILD_LOG, output));
+                _buildLogsWritter.LogUrls.TryGetValue(BUILD_LOG, out _reportUri);
             });
 
             var copyOverMsBuildLogsTask = Task.Run(async () =>
@@ -101,7 +151,7 @@ namespace StampyWorker.Jobs.BuildJobs
                 long byteCount = 0;
                 while (!buildTask.IsCompleted)
                 {
-                    var msBuildLogFile = Path.Combine(Environment.GetEnvironmentVariable("AntaresMainRepoLocation"), "msbuild.log");
+                    var msBuildLogFile = Path.Combine(Environment.GetEnvironmentVariable("AntaresMainRepoLocation"), MSBUILD_LOG);
                     if (File.Exists(msBuildLogFile))
                     {
                         string content;
@@ -123,16 +173,27 @@ namespace StampyWorker.Jobs.BuildJobs
                             content = await reader.ReadToEndAsync();
                         }
                         offset += Encoding.UTF8.GetByteCount(content);
-                        _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync("build-logs.txt", content));
+                        _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(BUILD_LOG, content));
                     }
 
                     await Task.Delay(5000);
                 }
             });
 
+            _logger.WriteInfo(_cloudStampyArgs, "Start build");
+
             await Task.WhenAll(new Task[] { buildTask, copyOverMsBuildLogsTask });
 
-            //check to see if build failed
+            if (buildTask.Result != 0)
+            {
+                JobStatus = Status.Failed;
+                throw new Exception("Build failed");
+            }
+            else
+            {
+                _logger.WriteInfo(_cloudStampyArgs, "Ran build successfully");
+            }
+
             string msBuildErrorFile = Path.Combine(Environment.GetEnvironmentVariable("AntaresMainRepoLocation"), "msbuild.err");
             if (File.Exists(msBuildErrorFile))
             {
@@ -145,14 +206,44 @@ namespace StampyWorker.Jobs.BuildJobs
                     }
                 }
 
-                JobStatus = jobResult.JobStatus = Status.Failed;
-                jobResult.Message = buildErrors.First();
+                jobResult.JobStatus = Status.Failed;
                 jobResult.ResultDetails["BuildErrors"] = string.Join(@"\r\n", buildErrors);
+                return jobResult;
             }
-            else
+
+
+            _logger.WriteInfo(_cloudStampyArgs, $"Copy build to {buildDirectoryName}");
+
+            var buildOutputDirectory = Path.Combine(Environment.GetEnvironmentVariable("AntaresMainRepoLocation"), "out");
+            if (!Directory.Exists(buildOutputDirectory))
             {
-                JobStatus = jobResult.JobStatus = Status.Passed;
+                throw new DirectoryNotFoundException($"Cant find directory {buildOutputDirectory}");
             }
+
+            int copyBuildActionExitCode = await ProcessInvoker.Start(copyBuildAction, (output, isFailure) =>
+            {
+                JobStatus = Status.InProgress;
+                _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(MACHINE_LOG, output));
+                _buildLogsWritter.LogUrls.TryGetValue(MACHINE_LOG, out _reportUri);
+            });
+
+            if (copyBuildActionExitCode > 1)//Robocopy error codes 0×01 = 1 = One or more files were copied successfully (that is, new files have arrived).
+            {
+                throw new Exception("Build could not be copied");
+            }
+
+            if (!Directory.Exists($@"\\{Environment.GetEnvironmentVariable("COMPUTERNAME")}\Builds"))
+            {
+                await ProcessInvoker.Start(@"C:\Windows\System32\net.exe", $@"share Builds={Environment.GetEnvironmentVariable("BuildVolume")}", null, (output, isFailed) =>
+                {
+                    JobStatus = Status.InProgress;
+                    _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(MACHINE_LOG, output));
+                });
+            }
+
+            _buildLogsWritter.LogUrls.TryGetValue(BUILD_LOG, out _reportUri);
+            jobResult.JobStatus = Status.Passed;
+            jobResult.ResultDetails["Build Share"] = $@"\\{Environment.GetEnvironmentVariable("COMPUTERNAME")}\Builds\{buildDirectoryName}\debug-amd64";
 
             return jobResult;
         }

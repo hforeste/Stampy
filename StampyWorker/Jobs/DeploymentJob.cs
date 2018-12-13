@@ -23,7 +23,6 @@ namespace StampyWorker.Jobs
         private JobResult _result;
         private ConcurrentQueue<string> _deploymentContent;
         private List<Task> _loggingTasks;
-        private string _logUri;
 
         public DeploymentJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {

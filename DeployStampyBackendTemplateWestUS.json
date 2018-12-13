@@ -4,7 +4,7 @@
   "parameters": {
     "vmSku": {
       "type": "string",
-      "defaultValue": "Standard_DS4_v2",
+      "defaultValue": "Standard_D3_v2",
       "metadata": {
         "description": "Size of VMs in the VM Scale Set."
       }
@@ -95,7 +95,7 @@
     {
       "type": "Microsoft.Compute/virtualMachineScaleSets",
       "name": "[parameters('vmssName')]",
-      "location": "West US 2",
+      "location": "[resourceGroup().location]",
       "apiVersion": "2018-04-01",
       "sku": {
         "name": "[parameters('vmSku')]",
@@ -110,10 +110,7 @@
           "storageProfile": {
             "osDisk": {
               "createOption": "FromImage",
-              "caching": "ReadWrite",
-              "managedDisk": {
-                "storageAccountType": "Premium_LRS"
-                }
+              "caching": "ReadWrite"
             },
             "imageReference": {
               "id":"[resourceId('Microsoft.Compute/images', parameters('imageName'))]"
@@ -124,7 +121,7 @@
                   "lun": 0,
                   "createOption": "Empty",
                   "managedDisk": {
-                    "storageAccountType": "Premium_LRS"
+                    "storageAccountType": "StandardSSD_LRS"
                   }
                 }
             ]
