@@ -165,7 +165,6 @@ namespace StampyWorker.Jobs
             }
             else
             {
-                _logger.WriteInfo(_parameters, "Waiting on writing logs to azure file");
                 await Task.WhenAll(_loggingTasks);
                 _loggingTasks.Clear();
             }
