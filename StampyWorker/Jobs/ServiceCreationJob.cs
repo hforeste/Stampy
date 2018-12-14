@@ -80,7 +80,7 @@ namespace StampyWorker.Jobs
             var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{_parameters.CloudName}\developer.definitions";
             var cloudStampyFirewallRules =
 @"
-<redefine name=""SqlFirewallAddressRangesList"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24"" /><redefine name=""FirewallLockdownWhitelistedSources"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24"" />
+<redefine name=""SqlFirewallAddressRangesList"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24;104.44.112.0/24;157.58.30.0/24"" /><redefine name=""FirewallLockdownWhitelistedSources"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24;104.44.112.0/24;157.58.30.0/24"" />
 ";
             if (!TryModifyDefinitions(definitionsPath, cloudStampyFirewallRules))
             {

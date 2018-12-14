@@ -30,9 +30,9 @@ namespace StampyWorker.Jobs.BuildJobs
             throw new NotImplementedException();
         }
 
-        public Task<JobResult> Execute()
+        public async Task<JobResult> Execute()
         {
-            throw new NotImplementedException();
+            return await ExecuteBuild(_args.DpkPath);
         }
 
         public async Task<JobResult> ExecuteBuild(string dpkPath)
