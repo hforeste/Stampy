@@ -1,16 +1,15 @@
-﻿using AutomationUnit.Client;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using System.Xml;
+using AutomationUnit.Client;
 using AutomationUnit.DataModel;
 using StampyCommon;
 using StampyCommon.Models;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml;
+using StampyWorker.Jobs;
 
-namespace StampyWorker.Utilities
+namespace StampyWorker.Jobs.BuildJobs
 {
     internal class LabMachineBuildClient : IBuildClient, IJob
     {
@@ -31,9 +30,9 @@ namespace StampyWorker.Utilities
             throw new NotImplementedException();
         }
 
-        public Task<JobResult> Execute()
+        public async Task<JobResult> Execute()
         {
-            throw new NotImplementedException();
+            return await ExecuteBuild(_args.DpkPath);
         }
 
         public async Task<JobResult> ExecuteBuild(string dpkPath)

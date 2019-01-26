@@ -1,4 +1,7 @@
-﻿using System;
+using StampyCommon;
+using StampyCommon.Loggers;
+using StampyCommon.Models;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml;
@@ -8,14 +11,37 @@ namespace StampyWorker.Jobs
 {
     internal class ServiceCreationJob : AntaresDeploymentBaseJob
     {
-        public ServiceCreationJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs) : base(logger, cloudStampyArgs) { }
+        ICloudStampyLogger _logger;
+        CloudStampyParameters _parameters;
+        private StringBuilder _statusMessageBuilder;
+        private JobResult _result;
+        private AzureFileLogger _azureFilesWriter;
+        private List<Task> _azureLogsWriterUnfinishedJobs;
+        private const string LOG_FILE_NAME = "createservice.log";
 
         protected override void PreExecute()
         {
-            //no op
+            _logger = logger;
+            _result = new JobResult();
+            _parameters = cloudStampyArgs;
+            _statusMessageBuilder = new StringBuilder();
+            _azureFilesWriter = new AzureFileLogger(new LoggingConfiguration(), cloudStampyArgs, logger);
+            _azureLogsWriterUnfinishedJobs = new List<Task>();
         }
 
-        protected override List<AntaresDeploymentTask> GetAntaresDeploymentTasks()
+        public Status JobStatus { get; set; }
+        public string ReportUri
+        {
+            get
+            {
+                _azureFilesWriter.LogUrls.TryGetValue(LOG_FILE_NAME, out string url);
+                return url;
+            }
+            set
+            { }
+        }
+
+        public Task<bool> Cancel()
         {
             var commands = new List<AntaresDeploymentTask>()
             {
@@ -29,16 +55,58 @@ namespace StampyWorker.Jobs
             return commands;
         }
 
-        protected override void PostExecute()
+        public async Task<JobResult> Execute()
         {
             var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{Parameters.CloudName}\developer.definitions";
             var cloudStampyFirewallRules =
 @"
-<redefine name=""SqlFirewallAddressRangesList"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24"" /><redefine name=""FirewallLockdownWhitelistedSources"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24"" />
+<redefine name=""SqlFirewallAddressRangesList"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24;104.44.112.0/24;157.58.30.0/24"" /><redefine name=""FirewallLockdownWhitelistedSources"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24;104.44.112.0/24;157.58.30.0/24"" />
 ";
             if (!TryModifyDefinitions(definitionsPath, cloudStampyFirewallRules))
             {
-                throw new Exception("Failed to add cloud stampy firewall rules to developer.definitions file.");
+                _statusMessageBuilder.AppendLine("Failed to add cloud stampy firewall rules to developer.definitions file.");
+                _result.JobStatus = Status.Failed;
+            }
+
+            _result.Message = _statusMessageBuilder.ToString();
+            _result.JobStatus = JobStatus = _result.JobStatus == Status.None ? Status.Passed : _result.JobStatus;
+            await Task.WhenAll(_azureLogsWriterUnfinishedJobs);
+            return _result;
+        }
+
+        private void OutputReceived(object sender, DataReceivedEventArgs e)
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+            {
+                _azureLogsWriterUnfinishedJobs.Add(_azureFilesWriter.CreateLogIfNotExistAppendAsync(LOG_FILE_NAME, e.Data));
+                if (JobStatus == default(Status))
+                {
+                    JobStatus = Status.InProgress;
+                }
+
+                _logger.WriteInfo(_parameters, e.Data);
+                if (e.Data.Contains("<ERROR>") || e.Data.Contains("<Exception>") || e.Data.Contains("Error:"))
+                {
+                    _statusMessageBuilder.AppendLine(e.Data);
+                    _result.JobStatus = JobStatus = Status.Failed;
+                }
+            }
+        }
+
+        private void ErrorReceived(object sender, DataReceivedEventArgs e)
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+            {
+                _azureLogsWriterUnfinishedJobs.Add(_azureFilesWriter.CreateLogIfNotExistAppendAsync("createservice.log", e.Data));
+                _statusMessageBuilder.AppendLine(e.Data);
+            }
+        }
+
+        private string AntaresDeploymentExecutablePath
+        {
+            get
+            {
+                return Path.Combine(_parameters.BuildPath, @"hosting\Azure\RDTools\Tools\Antares\AntaresDeployment.exe");
             }
         }
 

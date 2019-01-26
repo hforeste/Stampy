@@ -23,7 +23,6 @@ namespace StampyWorker.Jobs
         private JobResult _result;
         private ConcurrentQueue<string> _deploymentContent;
         private List<Task> _loggingTasks;
-        private string _logUri;
 
         public DeploymentJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
@@ -166,7 +165,6 @@ namespace StampyWorker.Jobs
             }
             else
             {
-                _logger.WriteInfo(_parameters, "Waiting on writing logs to azure file");
                 await Task.WhenAll(_loggingTasks);
                 _loggingTasks.Clear();
             }
