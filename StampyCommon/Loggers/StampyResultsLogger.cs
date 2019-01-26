@@ -42,9 +42,9 @@ namespace StampyCommon.Loggers
             WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, null, jobUri, null, null);
         }
 
-        public void WriteResult(string requestId, string jobId, StampyJobType jobType, string status, int jobDurationMinutes, Exception ex)
+        public void WriteResult(string requestId, string jobId, StampyJobType jobType, string status, int jobDurationMinutes, string jobUri, Exception ex)
         {
-            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, jobDurationMinutes, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");
+            WriteEvent(DateTime.UtcNow, requestId, jobId, jobType, status, jobDurationMinutes, jobUri, ex != null ? ex.GetType().ToString() : "", ex != null ? ex.ToString() : "");
         }
     }
 }
