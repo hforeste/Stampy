@@ -22,6 +22,7 @@ namespace StampyVmssManagement
 
         private const int numBufferMachines = 10;
 
+        [Disable]
         [FunctionName("CapacityManager")]
         public static async Task ScaleVmss([TimerTrigger("*/30 * * * * *")]TimerInfo myTimer, TraceWriter log)
         {
@@ -35,6 +36,7 @@ namespace StampyVmssManagement
         /// </summary>
         /// <param name="timer"></param>
         /// <returns></returns>
+        [Disable]
         [FunctionName("ResetScaleSet")]
         public static async Task ResetScaleSet([TimerTrigger("0 0 9 * * *")]TimerInfo timer, TraceWriter log)
         {
