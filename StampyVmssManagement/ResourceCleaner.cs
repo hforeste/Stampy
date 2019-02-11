@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Authentication;
@@ -29,7 +30,7 @@ namespace StampyVmssManagement
             _logger = log;
             var t1 = DeleteStorageAccounts();
             var t2 = DeleteSqlServers();
-            var t3 = DeleteCloudServices();
+            var t3 = DeleteResourceGroups();
             var tasks = new Task[] { t1, t2, t3 };
             await Task.WhenAll(tasks);
             foreach (Task<ResourceCleanerOperation> t in tasks)
@@ -37,6 +38,14 @@ namespace StampyVmssManagement
                 var cleanOperation = await t;
                 _logger.Info(cleanOperation.ToString());
             }
+        }
+
+        [Disable]
+        [FunctionName("ResourceCleanerDebug")]
+        public static async void RunDebug([TimerTrigger("* */1 * * * *")]TimerInfo myTimer, TraceWriter log)
+        {
+            _logger = log;
+            await DeleteResourceGroups();
         }
 
         public static async Task<ResourceCleanerOperation> DeleteSqlServers()
@@ -211,19 +220,19 @@ namespace StampyVmssManagement
             return cleanOperation;
         }
 
-        public static async Task DeleteResourceGroups()
+        public static async Task<ResourceCleanerOperation> DeleteResourceGroups()
         {
-            var clientId = Environment.GetEnvironmentVariable("AAD_ClientId");
-            var clientSecret = Environment.GetEnvironmentVariable("AAD_ClientSecret");
+            var operation = new ResourceCleanerOperation();
+            operation.ResourceType = "ResourceGroups";
+
             using (var httpClient = new CustomHttpClient(_logger))
             {
-                var accessToken = await Utility.GetServicePrincipalAccessToken(clientId, clientSecret);
-
-                var subscription = Environment.GetEnvironmentVariable("CloudResourcesSubscriptionId");
-                string requestUri = $"https://management.azure.com/subscriptions/{subscription}/resourcegroups?api-version=2018-05-01";
+                var accessToken = await Utility.GetServicePrincipalAccessToken(_clientId, _clientSecret);
+                string requestUri = $"https://management.azure.com/subscriptions/{_subscription}/resourcegroups?api-version=2018-05-01";
                 var request = new HttpRequestMessage(HttpMethod.Get, new Uri(requestUri));
-                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
                 var response = await httpClient.SendAsync("ListResourceGroups", request);
 
                 if (response.IsSuccessStatusCode)
@@ -231,9 +240,55 @@ namespace StampyVmssManagement
                     var result = await response.Content.ReadAsStringAsync();
                     var json = JObject.Parse(result);
                     var resourceGroupNames = json["value"].Select(i => (JObject)i).Select(i => i.Value<string>("name")).Where(s => s.StartsWith("stampy"));
+                    var resourceGroupIds = json["value"].Select(i => (JObject)i).Select(i => i.Value<string>("id")).Where(s => s.Contains("stampy-"));
+                    operation.Total = resourceGroupIds.Count();
+
+                    var operations = new List<string>();
+
+                    var operationStatusUrls = new Dictionary<string, string>();
+                    foreach (var resourceId in resourceGroupIds)
+                    {
+                        requestUri = $"https://management.azure.com{resourceId}?api-version=2018-05-01";
+                        response = await httpClient.SendAsync("DeleteResourceGroups", new HttpRequestMessage(HttpMethod.Delete, requestUri));
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            if (response.Headers.TryGetValues("Location", out IEnumerable<string> values))
+                            {
+                                operationStatusUrls.Add(resourceId, values.First());
+                            }
+                        }
+                    }
+
+                    while (operationStatusUrls.Count > 0)
+                    {
+                        await Task.Delay(20 * 1000);
+                        var deletedResources = new List<string>();
+                        foreach (var item in operationStatusUrls)
+                        {
+                            response = await httpClient.SendAsync("CheckingOperation", new HttpRequestMessage(HttpMethod.Get, item.Value));
+                            _logger.Info($"DeleteOperationStatus for {item.Key} : {response.StatusCode}");
+                            if (response.StatusCode == HttpStatusCode.OK || response.StatusCode == HttpStatusCode.NoContent)
+                            {
+                                operation.TotalScavenged += 1;
+                                deletedResources.Add(item.Key);
+                            }
+                            else if((int)response.StatusCode >= 500)
+                            {
+                                _logger.Error($"Failed to delete resourceGroup with Id: {item.Key}");
+                                operation.TotalResourceDeletionFailures += 1;
+                            }
+                        }
+
+                        foreach (var item in deletedResources)
+                        {
+                            operationStatusUrls.Remove(item);
+                        }
+                    }
                 }
             }
 
+            return operation;
         }
 
         private static X509Certificate2 GetMyX509Certificate(string thumbprint)
