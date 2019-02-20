@@ -25,7 +25,7 @@ namespace StampyVmssManagement
         private static int _resourceMaxLivingTimeInHours = Int32.Parse(Environment.GetEnvironmentVariable("ResourceMaxLivingTimeInHours"));
 
         [FunctionName("ResourceCleaner")]
-        public static async void Run([TimerTrigger("* */5 * * * *")]TimerInfo myTimer, TraceWriter log)
+        public static async void Run([TimerTrigger("0 0 */1 * * *")]TimerInfo myTimer, TraceWriter log)
         {
             _logger = log;
             var t1 = DeleteStorageAccounts();
