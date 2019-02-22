@@ -10,9 +10,9 @@ namespace StampyVmssManagement.Models
     {
         public DateTime RequestTimeStamp { get; set; }
         public string User { get; set; }
-        public string JobId { get; set; }
+        public string Id { get; set; }
         public string Client { get; set; }
         public string Branch { get; set; }
-        public string JobTypes { get; set; }
+        public string[] JobTypes { get; set; }
     }
 }

@@ -35,7 +35,7 @@ namespace StampyVmssManagement
 
             foreach (DataRow row in tableResult.Rows)
             {
-                response.Add(new Request { JobId = row["RequestId"].ToString(), RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()), User = row["User"].ToString(), Branch = row["DpkPath"].ToString(), Client = row["Client"].ToString(), JobTypes = row["JobTypes"].ToString() });
+                response.Add(new Request { Id = row["RequestId"].ToString(), RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()), User = row["User"].ToString(), Branch = row["DpkPath"].ToString(), Client = row["Client"].ToString(), JobTypes = row["JobTypes"].ToString().Split(new char[]{'|'}) });
             }
 
             return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
@@ -66,18 +66,44 @@ namespace StampyVmssManagement
             return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
         }
 
-        [FunctionName("QueueJob")]
-        public static async Task<HttpResponseMessage> QueueJob([HttpTrigger(AuthorizationLevel.Function, "post", Route = "jobs")]HttpRequestMessage req, TraceWriter log)
+        [FunctionName("QueueRequest")]
+        public static async Task<HttpResponseMessage> QueueRequest([HttpTrigger(AuthorizationLevel.Function, "post", Route = "requests")]HttpRequestMessage req, TraceWriter log)
         {
             var requestBodyString = await req.Content.ReadAsStringAsync();
-            var cloudStampyParameters = JsonConvert.DeserializeObject<StampyClientRequest>(requestBodyString);
 
-            if (string.IsNullOrWhiteSpace(cloudStampyParameters.RequestId))
+            if (string.IsNullOrWhiteSpace(requestBodyString))
             {
-                cloudStampyParameters.RequestId = Guid.NewGuid().ToString();
+                return req.CreateResponse(HttpStatusCode.BadRequest, "Add request to body");
             }
 
-            return req.CreateResponse(HttpStatusCode.Accepted, new { JobId = cloudStampyParameters.RequestId });
+            var request = JsonConvert.DeserializeObject<Request>(requestBodyString);
+
+            if (string.IsNullOrWhiteSpace(request.Branch))
+            {
+                return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing name of branch.");
+            }
+
+            if (request.JobTypes == null || !request.JobTypes.Any())
+            {
+                return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing the specific job types. eg., Build, Deploy, and/or Test");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Client))
+            {
+                return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is name of the client. This can also be added in the user agent");
+            }
+
+            if (!req.Headers.UserAgent.Any())
+            {
+                return req.CreateResponse(HttpStatusCode.BadRequest, "Missing user agent");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Id))
+            {
+                request.Id = Guid.NewGuid().ToString();
+            }
+
+            return req.CreateResponse(HttpStatusCode.Accepted, new { request.Id });
         }
 
         [FunctionName("CancelJob")]
