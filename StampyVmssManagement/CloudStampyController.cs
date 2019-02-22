@@ -14,6 +14,7 @@ using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Queue;
 using Newtonsoft.Json;
 using StampyCommon;
+using StampyCommon.Loggers;
 using StampyCommon.Utilities;
 using StampyVmssManagement.Models;
 
@@ -22,9 +23,11 @@ namespace StampyVmssManagement
     public static class CloudStampyController
     {
         private static readonly CloudQueue buildQueue, deploymentQueue, testQueue;
+        private static readonly StampyClientRequestLogger _logger;
 
         static CloudStampyController()
         {
+            _logger = new StampyClientRequestLogger(new KustoConfiguration());
             // Retrieve storage account from connection string
             CloudStorageAccount storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("CloudStampyStorageConnectionString"));
 
@@ -143,7 +146,7 @@ namespace StampyVmssManagement
                 }
             }
 
-            if ((jobTypes & StampyJobType.CreateService) == 0)
+            if ((jobTypes & StampyJobType.CreateService) == StampyJobType.CreateService)
             {
                 if (request.CloudDeployments == null || !request.CloudDeployments.Any())
                 {
@@ -182,7 +185,7 @@ namespace StampyVmssManagement
             {
                 request.Id = Guid.NewGuid().ToString();
             }
-            
+
             var cloudStampyParameters = new CloudStampyParameters
             {
                 RequestId = request.Id,
@@ -191,7 +194,8 @@ namespace StampyVmssManagement
                 GitBranchName = request.Branch,
                 CloudName = request.CloudDeployments != null && request.CloudDeployments.Any() ? request.CloudDeployments.First().Key : GetRandomStampName(),
                 BuildPath = request.BuildFileShare,
-                DpkPath = request.DpkPath
+                DpkPath = request.DpkPath,
+                DeploymentTemplate = request.CloudDeployments != null && request.CloudDeployments.Any() ? request.CloudDeployments.First().Value : ""
             };
 
             var cloudQueueMessage = new CloudQueueMessage(cloudStampyParameters.ToJsonString());
@@ -206,8 +210,25 @@ namespace StampyVmssManagement
             {
                 storageException = ex;
             }
+            finally
+            {
+                var requestForLogging = new StampyClientRequest
+                {
+                    BuildPath = cloudStampyParameters.BuildPath,
+                    Client = userAgent.Name,
+                    CloudNames = request.CloudDeployments?.Keys.ToList() ?? new List<string> { cloudStampyParameters.CloudName },
+                    EndUserAlias = request.User,
+                    RequestId = request.Id,
+                    TestCategories = request.TestCategories.Split(new char[] { ';' }).ToList(),
+                    DpkPath = request.DpkPath ?? request.Branch,
+                    DeploymentTemplates = request.CloudDeployments?.Values.ToList(),
+                    JobTypes = jobTypes
+                };
 
-            if (cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Accepted)
+                _logger.WriteRequest(requestForLogging);
+            }
+
+            if (cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Created || cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Accepted)
             {
                 return req.CreateResponse(HttpStatusCode.Accepted, new { RequestId = request.Id, Message = $"Message was queued to cloud stampy storage account with ClientRequestId: {cxt.ClientRequestID} StatusCode: {cxt.LastResult.HttpStatusCode} Queue Message Id: {cloudQueueMessage.Id}" });
             }

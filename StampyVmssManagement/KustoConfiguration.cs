@@ -23,6 +23,6 @@ namespace StampyVmssManagement
 
         public string KustoDatabase => Environment.GetEnvironmentVariable("SourceKustoDatabase");
 
-        public bool IsProduction => throw new NotImplementedException();
+        public bool IsProduction => true;
     }
 }
