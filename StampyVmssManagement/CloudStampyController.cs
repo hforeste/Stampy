@@ -17,10 +17,10 @@ namespace StampyVmssManagement
 {
     public static class CloudStampyController
     {
-        [FunctionName("GetJobs")]
-        public static async Task<HttpResponseMessage> GetJobs([HttpTrigger(AuthorizationLevel.Function, "get", Route = "jobs")]HttpRequestMessage req, TraceWriter log)
+        [FunctionName("GetRequests")]
+        public static async Task<HttpResponseMessage> ListRequests([HttpTrigger(AuthorizationLevel.Function, "get", Route = "requests")]HttpRequestMessage req, TraceWriter log)
         {
-            var response = new List<object[]>();
+            var response = new List<Request>();
             var config = new KustoConfiguration();
             IDataReader reader;
             using (var client = new KustoClientReader(config, config.KustoDatabase))
@@ -28,19 +28,21 @@ namespace StampyVmssManagement
                 reader = await client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.ListJobs);
             }
 
+            var tableResult = new DataTable();
+            tableResult.Load(reader);
+
             var columns = reader.GetSchemaTable().Columns;
-            while (reader.Read())
+
+            foreach (DataRow row in tableResult.Rows)
             {
-                object[] values = new object[reader.FieldCount];
-                reader.GetValues(values);
-                response.Add(values);
+                response.Add(new Request { JobId = row["RequestId"].ToString(), RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()), User = row["User"].ToString(), Branch = row["DpkPath"].ToString(), Client = row["Client"].ToString(), JobTypes = row["JobTypes"].ToString() });
             }
 
-            return req.CreateResponse(HttpStatusCode.OK, response.Select(r => new { RequestTimeStamp = r[0], RequestId = r[1], User = r[2]}), "application/json");
+            return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
         }
 
-        [FunctionName("GetJobDetails")]
-        public static async Task<HttpResponseMessage> GetJobDetails([HttpTrigger(AuthorizationLevel.Function, "get", Route = "jobs/{id}")]HttpRequestMessage req, string id)
+        [FunctionName("GetRequestDetails")]
+        public static async Task<HttpResponseMessage> GetRequestDetails([HttpTrigger(AuthorizationLevel.Function, "get", Route = "requests/{id}")]HttpRequestMessage req, string id)
         {
             var response = new List<JobDetail>();
             var config = new KustoConfiguration();
