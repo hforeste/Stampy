@@ -11,6 +11,7 @@ using Microsoft.Azure.WebJobs.Host;
 using Newtonsoft.Json;
 using StampyCommon;
 using StampyCommon.Utilities;
+using StampyVmssManagement.Models;
 
 namespace StampyVmssManagement
 {
@@ -39,9 +40,28 @@ namespace StampyVmssManagement
         }
 
         [FunctionName("GetJobDetails")]
-        public static async Task<HttpResponseMessage> GetJobDetails([HttpTrigger(AuthorizationLevel.Function, "get", Route = "jobs/{id}")]HttpRequestMessage req, int id)
+        public static async Task<HttpResponseMessage> GetJobDetails([HttpTrigger(AuthorizationLevel.Function, "get", Route = "jobs/{id}")]HttpRequestMessage req, string id)
         {
-            return req.CreateResponse(HttpStatusCode.OK, id, "application/json");
+            var response = new List<JobDetail>();
+            var config = new KustoConfiguration();
+            IDataReader reader;
+            using (var client = new KustoClientReader(config, config.KustoDatabase))
+            {
+                reader = await client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.GetJobDetails(id));
+            }
+
+            var tableResult = new DataTable();
+            tableResult.Load(reader);
+
+            foreach (DataRow row in tableResult.Rows)
+            {
+                DateTime.TryParse(row["StartTime"].ToString(), out DateTime startTime);
+                DateTime.TryParse(row["EndTime"].ToString(), out DateTime endTime);
+                int.TryParse(row["JobDurationInMinutes"].ToString(), out int jobDurationInMinutes);
+                response.Add(new JobDetail { Id = (string)row["Id"], Type = (string)row["Type"], Status = (string)row["Status"], StartTime = startTime, EndTime = endTime, ExceptionType = row["ExceptionType"].ToString(), ExceptionDetails = row["ExceptionDetails"].ToString(), JobDurationInMinutes = jobDurationInMinutes, ReportUri = new Uri(row["ReportUri"].ToString()) });
+            }
+
+            return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
         }
 
         [FunctionName("QueueJob")]
@@ -55,7 +75,7 @@ namespace StampyVmssManagement
                 cloudStampyParameters.RequestId = Guid.NewGuid().ToString();
             }
 
-            return req.CreateResponse(HttpStatusCode.Accepted, new { OperationId = cloudStampyParameters.RequestId });
+            return req.CreateResponse(HttpStatusCode.Accepted, new { JobId = cloudStampyParameters.RequestId });
         }
 
         [FunctionName("CancelJob")]
