@@ -14,5 +14,6 @@ namespace StampyVmssManagement.Models
         public string Client { get; set; }
         public string Branch { get; set; }
         public string[] JobTypes { get; set; }
+        public string TestCategories { get; set; }
     }
 }

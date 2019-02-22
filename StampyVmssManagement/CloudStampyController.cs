@@ -35,7 +35,7 @@ namespace StampyVmssManagement
 
             foreach (DataRow row in tableResult.Rows)
             {
-                response.Add(new Request { Id = row["RequestId"].ToString(), RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()), User = row["User"].ToString(), Branch = row["DpkPath"].ToString(), Client = row["Client"].ToString(), JobTypes = row["JobTypes"].ToString().Split(new char[]{'|'}) });
+                response.Add(new Request { Id = row["RequestId"].ToString(), RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()), User = row["User"].ToString(), Branch = row["DpkPath"].ToString(), Client = row["Client"].ToString(), JobTypes = row["JobTypes"].ToString().Split(new char[]{'|'}), TestCategories = row["TestCategories"].ToString() });
             }
 
             return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
@@ -60,7 +60,7 @@ namespace StampyVmssManagement
                 DateTime.TryParse(row["StartTime"].ToString(), out DateTime startTime);
                 DateTime.TryParse(row["EndTime"].ToString(), out DateTime endTime);
                 int.TryParse(row["JobDurationInMinutes"].ToString(), out int jobDurationInMinutes);
-                response.Add(new JobDetail { Id = (string)row["Id"], Type = (string)row["Type"], Status = (string)row["Status"], StartTime = startTime, EndTime = endTime, ExceptionType = row["ExceptionType"].ToString(), ExceptionDetails = row["ExceptionDetails"].ToString(), JobDurationInMinutes = jobDurationInMinutes, ReportUri = new Uri(row["ReportUri"].ToString()) });
+                response.Add(new JobDetail { Id = (string)row["JobId"], Type = (string)row["JobType"], Status = (string)row["Status"], StartTime = startTime, EndTime = endTime, ExceptionType = row["ExceptionType"].ToString(), ExceptionDetails = row["ExceptionDetails"].ToString(), JobDurationInMinutes = jobDurationInMinutes, ReportUri = new Uri(row["ReportUri"].ToString()) });
             }
 
             return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
@@ -97,6 +97,8 @@ namespace StampyVmssManagement
             {
                 return req.CreateResponse(HttpStatusCode.BadRequest, "Missing user agent");
             }
+
+            var userAgent = req.Headers.UserAgent.First().Product;
 
             if (string.IsNullOrWhiteSpace(request.Id))
             {

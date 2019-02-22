@@ -11,8 +11,7 @@ namespace StampyVmssManagement
         public static string ListJobs = @"
 StampyClientRequests
 | where TimeStamp >= ago(30d)
-| project TimeStamp, RequestId, User
-| distinct TimeStamp, RequestId, User
+| distinct TimeStamp, RequestId, User, BuildPath , DpkPath, Client , JobTypes, DeploymentTemplatePerCloudService , TestCategories
 ";
         public static string GetJobDetails(string requestId)
         {
@@ -21,7 +20,7 @@ StampyClientRequests
 | extend EndTime = iif(isnotnull(JobDurationMinutes), TimeStamp, datetime(null))
 | summarize arg_max(TimeStamp, Status), StartTime = min(TimeStamp), EndTime = max(EndTime), ReportUri = any(ReportUri), JobDurationInMinutes = any(JobDurationMinutes), ExceptionType = any(ExceptionType), ExceptionDetails = any(ExceptionDetails) by JobId, JobType
 | order by TimeStamp asc
-| project - away TimeStamp";
+| project-away TimeStamp";
         }
 
     }
