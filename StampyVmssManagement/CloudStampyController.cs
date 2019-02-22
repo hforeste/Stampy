@@ -75,7 +75,9 @@ namespace StampyVmssManagement
                     Client = row["Client"].ToString(),
                     JobTypes = jobs,
                     TestCategories = row["TestCategories"].ToString(),
-                    CloudDeployments = cloudServiceAndDeploymentTemplate
+                    CloudDeployments = cloudServiceAndDeploymentTemplate,
+                    BuildFileShare = row["BuildPath"].ToString(),
+                    DpkPath = row["DpkPath"].ToString()
                 });
             }
 
@@ -146,7 +148,7 @@ namespace StampyVmssManagement
                 }
             }
 
-            if ((jobTypes & StampyJobType.CreateService) == StampyJobType.CreateService)
+            if ((jobTypes & StampyJobType.CreateService) == 0)
             {
                 if (request.CloudDeployments == null || !request.CloudDeployments.Any())
                 {
@@ -159,9 +161,9 @@ namespace StampyVmssManagement
                 if (!string.IsNullOrWhiteSpace(request.BuildFileShare))
                 {
                     var directories = Directory.GetDirectories(request.BuildFileShare);
-                    if (!directories.Contains("debug-amd64", StringComparer.CurrentCultureIgnoreCase) && !directories.Contains("retail-amd64", StringComparer.CurrentCultureIgnoreCase))
+                    if (!directories.Any(directory => directory.EndsWith("hosting", StringComparison.CurrentCultureIgnoreCase)))
                     {
-                        return req.CreateResponse(HttpStatusCode.BadRequest, $"At the root of this file share, it does not contain one of the following: debug-amd64 or retail-amd64. Build File Share: {request.BuildFileShare}");
+                        return req.CreateResponse(HttpStatusCode.BadRequest, $"At the root of this file share, it does not contain the hosting folder. Build File Share: {request.BuildFileShare}");
                     }
                 }
             }
@@ -221,7 +223,7 @@ namespace StampyVmssManagement
                     RequestId = request.Id,
                     TestCategories = request.TestCategories.Split(new char[] { ';' }).ToList(),
                     DpkPath = request.DpkPath ?? request.Branch,
-                    DeploymentTemplates = request.CloudDeployments?.Values.ToList(),
+                    DeploymentTemplates = request.CloudDeployments?.Values.ToList() ?? new List<string> { "Antares_StompDeploy.xml", "GeoMaster_StompDeploy.xml" },
                     JobTypes = jobTypes
                 };
 
