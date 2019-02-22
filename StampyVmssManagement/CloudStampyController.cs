@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -7,6 +8,8 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
+using Newtonsoft.Json;
+using StampyCommon;
 using StampyCommon.Utilities;
 
 namespace StampyVmssManagement
@@ -42,25 +45,17 @@ namespace StampyVmssManagement
         }
 
         [FunctionName("QueueJob")]
-        public static async Task<HttpResponseMessage> QueueJob([HttpTrigger(AuthorizationLevel.Function, "put", Route = "jobs")]HttpRequestMessage req, TraceWriter log)
+        public static async Task<HttpResponseMessage> QueueJob([HttpTrigger(AuthorizationLevel.Function, "post", Route = "jobs")]HttpRequestMessage req, TraceWriter log)
         {
-            log.Info("C# HTTP trigger function processed a request.");
+            var requestBodyString = await req.Content.ReadAsStringAsync();
+            var cloudStampyParameters = JsonConvert.DeserializeObject<StampyClientRequest>(requestBodyString);
 
-            // parse query parameter
-            string name = req.GetQueryNameValuePairs()
-                .FirstOrDefault(q => string.Compare(q.Key, "name", true) == 0)
-                .Value;
-
-            if (name == null)
+            if (string.IsNullOrWhiteSpace(cloudStampyParameters.RequestId))
             {
-                // Get request body
-                dynamic data = await req.Content.ReadAsAsync<object>();
-                name = data?.name;
+                cloudStampyParameters.RequestId = Guid.NewGuid().ToString();
             }
 
-            return name == null
-                ? req.CreateResponse(HttpStatusCode.BadRequest, "Please pass a name on the query string or in the request body")
-                : req.CreateResponse(HttpStatusCode.OK, "Hello " + name);
+            return req.CreateResponse(HttpStatusCode.Accepted, new { OperationId = cloudStampyParameters.RequestId });
         }
 
         [FunctionName("CancelJob")]
