@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Queue;
 using Newtonsoft.Json;
 using StampyCommon;
 using StampyCommon.Utilities;
@@ -17,6 +21,22 @@ namespace StampyVmssManagement
 {
     public static class CloudStampyController
     {
+        private static readonly CloudQueue buildQueue, deploymentQueue, testQueue;
+
+        static CloudStampyController()
+        {
+            // Retrieve storage account from connection string
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(Environment.GetEnvironmentVariable("CloudStampyStorageConnectionString"));
+
+            // Create the queue client
+            CloudQueueClient queueClient = storageAccount.CreateCloudQueueClient();
+
+            // Retrieve a reference to a queue
+            buildQueue = queueClient.GetQueueReference("build-jobs");
+            deploymentQueue = queueClient.GetQueueReference("build-jobs");
+            testQueue = queueClient.GetQueueReference("build-jobs");
+        }
+
         [FunctionName("GetRequests")]
         public static async Task<HttpResponseMessage> ListRequests([HttpTrigger(AuthorizationLevel.Function, "get", Route = "requests")]HttpRequestMessage req, TraceWriter log)
         {
@@ -35,7 +55,22 @@ namespace StampyVmssManagement
 
             foreach (DataRow row in tableResult.Rows)
             {
-                response.Add(new Request { Id = row["RequestId"].ToString(), RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()), User = row["User"].ToString(), Branch = row["DpkPath"].ToString(), Client = row["Client"].ToString(), JobTypes = row["JobTypes"].ToString().Split(new char[]{'|'}), TestCategories = row["TestCategories"].ToString() });
+                var jobs = row["JobTypes"].ToString().Split(new char[] { '|' }).ToList();
+                var cloudServices = row["CloudServiceNames"].ToString().Split(new char[] { ',' });
+                var deploymentTemplates = row["DeploymentTemplatePerCloudService"].ToString().Split(new char[] { ',' });
+                var cloudServiceAndDeploymentTemplate = cloudServices.Zip(deploymentTemplates, (first, second) => new KeyValuePair<string, string>(first, second))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+                response.Add(new Request
+                {
+                    Id = row["RequestId"].ToString(),
+                    RequestTimeStamp = DateTime.Parse(row["TimeStamp"].ToString()),
+                    User = row["User"].ToString(), Branch = row["DpkPath"].ToString(),
+                    Client = row["Client"].ToString(),
+                    JobTypes = jobs,
+                    TestCategories = row["TestCategories"].ToString(),
+                    CloudDeployments = cloudServiceAndDeploymentTemplate
+                });
             }
 
             return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
@@ -78,24 +113,64 @@ namespace StampyVmssManagement
 
             var request = JsonConvert.DeserializeObject<Request>(requestBodyString);
 
-            if (string.IsNullOrWhiteSpace(request.Branch))
-            {
-                return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing name of branch.");
-            }
-
             if (request.JobTypes == null || !request.JobTypes.Any())
             {
                 return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing the specific job types. eg., Build, Deploy, and/or Test");
             }
 
-            if (string.IsNullOrWhiteSpace(request.Client))
+            StampyJobType jobTypes = StampyJobType.None;
+            try
             {
-                return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is name of the client. This can also be added in the user agent");
+                var jobTypeList = request.JobTypes.Select(t => (StampyJobType)Enum.Parse(typeof(StampyJobType), t));
+                foreach (StampyJobType jobType in jobTypeList)
+                {
+                    jobTypes = jobTypes | jobType;
+                }
+            }
+            catch (Exception)
+            {
+                return req.CreateResponse(HttpStatusCode.BadRequest, $"Incorrect job types. Please take a look. Eg., All the availabile job types are {Enum.GetNames(typeof(StampyJobType))}");
+            }
+
+            if ((jobTypes & StampyJobType.Build) == StampyJobType.Build)
+            {
+                if (string.IsNullOrWhiteSpace(request.Branch))
+                {
+                    return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing name of branch.");
+                }
+            }
+
+            if ((jobTypes & StampyJobType.Deploy) == StampyJobType.Deploy)
+            {
+                if (request.CloudDeployments == null || !request.CloudDeployments.Any())
+                {
+                    return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing cloud service and deployment type");
+                }
+            }
+
+            if ((jobTypes & StampyJobType.Build) == 0)
+            {
+                if (!string.IsNullOrWhiteSpace(request.BuildFileShare))
+                {
+                    var directories = Directory.GetDirectories(request.BuildFileShare);
+                    if (!directories.Contains("debug-amd64", StringComparer.CurrentCultureIgnoreCase) && !directories.Contains("retail-amd64", StringComparer.CurrentCultureIgnoreCase))
+                    {
+                        return req.CreateResponse(HttpStatusCode.BadRequest, $"At the root of this file share, it does not contain one of the following: debug-amd64 or retail-amd64. Build File Share: {request.BuildFileShare}");
+                    }
+                }
+            }
+
+            if ((jobTypes & StampyJobType.Test) == StampyJobType.Test)
+            {
+                if (string.IsNullOrWhiteSpace(request.TestCategories))
+                {
+                    return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing test categories.");
+                }
             }
 
             if (!req.Headers.UserAgent.Any())
             {
-                return req.CreateResponse(HttpStatusCode.BadRequest, "Missing user agent");
+                return req.CreateResponse(HttpStatusCode.BadRequest, "Headers missing user-agent");
             }
 
             var userAgent = req.Headers.UserAgent.First().Product;
@@ -104,6 +179,17 @@ namespace StampyVmssManagement
             {
                 request.Id = Guid.NewGuid().ToString();
             }
+            
+            var cloudStampyParameters = new CloudStampyParameters
+            {
+                RequestId = request.Id,
+                JobType = jobTypes,
+                TestCategories = request.TestCategories.Split(new char[] { ';' }).AsParallel().Select(s => s.Split(new char[] { ',' }).ToList()).ToList(),
+                GitBranchName = request.Branch,
+                CloudName = request.CloudDeployments != null && request.CloudDeployments.Any() ? request.CloudDeployments.First().Key : GetRandomStampName(),
+                BuildPath = request.BuildFileShare,
+                DpkPath = request.DpkPath
+            };
 
             return req.CreateResponse(HttpStatusCode.Accepted, new { request.Id });
         }
@@ -128,6 +214,20 @@ namespace StampyVmssManagement
             return name == null
                 ? req.CreateResponse(HttpStatusCode.BadRequest, "Please pass a name on the query string or in the request body")
                 : req.CreateResponse(HttpStatusCode.OK, "Hello " + name);
+        }
+
+        private static string GetRandomStampName()
+        {
+            const string alphanumericalchars = "abcdefghijklmnopqrstuvwxyz1234567890";
+            var rng = new RNGCryptoServiceProvider();
+            byte[] xx = new byte[16];
+            rng.GetBytes(xx);
+            char[] y = new char[8];
+            for (int i = 0; i < y.Length; i++)
+            {
+                y[i] = alphanumericalchars[(xx[i] % alphanumericalchars.Length)];
+            }
+            return $"stampy-{new string(y)}";
         }
     }
 }

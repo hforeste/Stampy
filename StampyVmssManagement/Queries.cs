@@ -12,6 +12,7 @@ namespace StampyVmssManagement
 StampyClientRequests
 | where TimeStamp >= ago(30d)
 | distinct TimeStamp, RequestId, User, BuildPath , DpkPath, Client , JobTypes, DeploymentTemplatePerCloudService , TestCategories
+| order by TimeStamp desc
 ";
         public static string GetJobDetails(string requestId)
         {
