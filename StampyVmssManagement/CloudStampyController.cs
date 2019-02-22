@@ -56,10 +56,13 @@ namespace StampyVmssManagement
             foreach (DataRow row in tableResult.Rows)
             {
                 var jobs = row["JobTypes"].ToString().Split(new char[] { '|' }).ToList();
-                var cloudServices = row["CloudServiceNames"].ToString().Split(new char[] { ',' });
-                var deploymentTemplates = row["DeploymentTemplatePerCloudService"].ToString().Split(new char[] { ',' });
-                var cloudServiceAndDeploymentTemplate = cloudServices.Zip(deploymentTemplates, (first, second) => new KeyValuePair<string, string>(first, second))
-                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+                var cloudServices = row["CloudServiceNames"]?.ToString().Split(new char[] { ',' });
+                var deploymentTemplates = row["DeploymentTemplatePerCloudService"]?.ToString().Split(new char[] { ',' });
+                Dictionary<string, string> cloudServiceAndDeploymentTemplate = null;
+                if (cloudServices != null && deploymentTemplates != null)
+                {
+                    cloudServiceAndDeploymentTemplate = cloudServices.Zip(deploymentTemplates, (first, second) => new KeyValuePair<string, string>(first, second)).ToDictionary(kv => kv.Key, kv => kv.Value);
+                }
 
                 response.Add(new Request
                 {
@@ -140,7 +143,7 @@ namespace StampyVmssManagement
                 }
             }
 
-            if ((jobTypes & StampyJobType.Deploy) == StampyJobType.Deploy)
+            if ((jobTypes & StampyJobType.CreateService) == 0)
             {
                 if (request.CloudDeployments == null || !request.CloudDeployments.Any())
                 {
@@ -191,7 +194,27 @@ namespace StampyVmssManagement
                 DpkPath = request.DpkPath
             };
 
-            return req.CreateResponse(HttpStatusCode.Accepted, new { request.Id });
+            var cloudQueueMessage = new CloudQueueMessage(cloudStampyParameters.ToJsonString());
+            var cxt = new OperationContext();
+            cxt.ClientRequestID = request.Id;
+
+            Exception storageException = null;
+            try
+            {
+                await buildQueue.AddMessageAsync(cloudQueueMessage, null, null, null, cxt);
+            }catch(Exception ex)
+            {
+                storageException = ex;
+            }
+
+            if (cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Accepted)
+            {
+                return req.CreateResponse(HttpStatusCode.Accepted, new { RequestId = request.Id, Message = $"Message was queued to cloud stampy storage account with ClientRequestId: {cxt.ClientRequestID} StatusCode: {cxt.LastResult.HttpStatusCode} Queue Message Id: {cloudQueueMessage.Id}" });
+            }
+            else
+            {
+                return req.CreateErrorResponse(HttpStatusCode.InternalServerError, (new { RequestId = request.Id, Message = $"Failed to queue request to cloud stampy storage account. ExceptionMessage: {storageException.Message}" }).ToString());                
+            }
         }
 
         [FunctionName("CancelJob")]

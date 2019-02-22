@@ -11,7 +11,7 @@ namespace StampyVmssManagement
         public static string ListJobs = @"
 StampyClientRequests
 | where TimeStamp >= ago(30d)
-| distinct TimeStamp, RequestId, User, BuildPath , DpkPath, Client , JobTypes, DeploymentTemplatePerCloudService , TestCategories
+| distinct TimeStamp, RequestId, User, BuildPath , DpkPath, Client , JobTypes, CloudServiceNames, DeploymentTemplatePerCloudService , TestCategories
 | order by TimeStamp desc
 ";
         public static string GetJobDetails(string requestId)
