@@ -41,7 +41,7 @@ namespace StampyVmssManagement
         }
 
         [FunctionName("GetRequests")]
-        public static async Task<HttpResponseMessage> ListRequests([HttpTrigger(AuthorizationLevel.Function, "get", Route = "requests")]HttpRequestMessage req, TraceWriter log)
+        public static async Task<HttpResponseMessage> ListRequests([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "requests")]HttpRequestMessage req, TraceWriter log)
         {
             var response = new List<Request>();
             var config = new KustoConfiguration();
@@ -85,7 +85,7 @@ namespace StampyVmssManagement
         }
 
         [FunctionName("GetRequestDetails")]
-        public static async Task<HttpResponseMessage> GetRequestDetails([HttpTrigger(AuthorizationLevel.Function, "get", Route = "requests/{id}")]HttpRequestMessage req, string id)
+        public static async Task<HttpResponseMessage> GetRequestDetails([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "requests/{id}")]HttpRequestMessage req, string id)
         {
             var response = new List<JobDetail>();
             var config = new KustoConfiguration();
@@ -110,7 +110,7 @@ namespace StampyVmssManagement
         }
 
         [FunctionName("QueueRequest")]
-        public static async Task<HttpResponseMessage> QueueRequest([HttpTrigger(AuthorizationLevel.Function, "post", Route = "requests")]HttpRequestMessage req, TraceWriter log)
+        public static async Task<HttpResponseMessage> QueueRequest([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "requests")]HttpRequestMessage req, TraceWriter log)
         {
             var requestBodyString = await req.Content.ReadAsStringAsync();
 
@@ -241,7 +241,7 @@ namespace StampyVmssManagement
         }
 
         [FunctionName("CancelJob")]
-        public static async Task<HttpResponseMessage> CancelJob([HttpTrigger(AuthorizationLevel.Function, "post", Route = "jobs/{id}")]HttpRequestMessage req, TraceWriter log)
+        public static async Task<HttpResponseMessage> CancelJob([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "jobs/{id}")]HttpRequestMessage req, TraceWriter log)
         {
             log.Info("C# HTTP trigger function processed a request.");
 
