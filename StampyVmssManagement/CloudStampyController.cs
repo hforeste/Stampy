@@ -113,14 +113,12 @@ namespace StampyVmssManagement
         public static async Task<HttpResponseMessage> QueueRequest([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "requests")]HttpRequestMessage req, TraceWriter log)
         {
             var requestBodyString = await req.Content.ReadAsStringAsync();
-
             if (string.IsNullOrWhiteSpace(requestBodyString))
             {
                 return req.CreateResponse(HttpStatusCode.BadRequest, "Add request to body");
             }
 
             var request = JsonConvert.DeserializeObject<Request>(requestBodyString);
-
             if (request.JobTypes == null || !request.JobTypes.Any())
             {
                 return req.CreateResponse(HttpStatusCode.BadRequest, "Request body is missing the specific job types. eg., Build, Deploy, and/or Test");
@@ -158,13 +156,9 @@ namespace StampyVmssManagement
 
             if ((jobTypes & StampyJobType.Build) == 0)
             {
-                if (!string.IsNullOrWhiteSpace(request.BuildFileShare))
+                if (string.IsNullOrWhiteSpace(request.BuildFileShare))
                 {
-                    var directories = Directory.GetDirectories(request.BuildFileShare);
-                    if (!directories.Any(directory => directory.EndsWith("hosting", StringComparison.CurrentCultureIgnoreCase)))
-                    {
-                        return req.CreateResponse(HttpStatusCode.BadRequest, $"At the root of this file share, it does not contain the hosting folder. Build File Share: {request.BuildFileShare}");
-                    }
+                    return req.CreateResponse(HttpStatusCode.BadRequest, $"Missing build path. Make sure that its the parent of the hosting folder.");
                 }
             }
 
@@ -200,43 +194,51 @@ namespace StampyVmssManagement
                 DeploymentTemplate = request.CloudDeployments != null && request.CloudDeployments.Any() ? request.CloudDeployments.First().Value : ""
             };
 
-            var cloudQueueMessage = new CloudQueueMessage(cloudStampyParameters.ToJsonString());
-            var cxt = new OperationContext();
-            cxt.ClientRequestID = request.Id;
-
-            Exception storageException = null;
+            Exception exception = null;
+            OperationContext cxt = null;
+            CloudQueueMessage cloudQueueMessage = null;
             try
             {
-                await buildQueue.AddMessageAsync(cloudQueueMessage, null, null, null, cxt);
+                try
+                {
+                    cloudQueueMessage = new CloudQueueMessage(cloudStampyParameters.ToJsonString());
+                    cxt = new OperationContext();
+                    cxt.ClientRequestID = request.Id;
+                    await buildQueue.AddMessageAsync(cloudQueueMessage, null, null, null, cxt);
+                }
+                catch (StorageException ex)
+                {
+                    exception = ex;
+                }
+                finally
+                {
+                    var requestForLogging = new StampyClientRequest
+                    {
+                        BuildPath = cloudStampyParameters.BuildPath,
+                        Client = userAgent.Name,
+                        CloudNames = request.CloudDeployments?.Keys.ToList() ?? new List<string> { cloudStampyParameters.CloudName },
+                        EndUserAlias = request.User,
+                        RequestId = request.Id,
+                        TestCategories = request.TestCategories.Split(new char[] { ';' }).ToList(),
+                        DpkPath = request.DpkPath ?? request.Branch,
+                        DeploymentTemplates = request.CloudDeployments?.Values.ToList() ?? new List<string> { "Antares_StompDeploy.xml", "GeoMaster_StompDeploy.xml" },
+                        JobTypes = jobTypes
+                    };
+
+                    _logger.WriteRequest(requestForLogging);
+                }
             }catch(Exception ex)
             {
-                storageException = ex;
-            }
-            finally
-            {
-                var requestForLogging = new StampyClientRequest
-                {
-                    BuildPath = cloudStampyParameters.BuildPath,
-                    Client = userAgent.Name,
-                    CloudNames = request.CloudDeployments?.Keys.ToList() ?? new List<string> { cloudStampyParameters.CloudName },
-                    EndUserAlias = request.User,
-                    RequestId = request.Id,
-                    TestCategories = request.TestCategories.Split(new char[] { ';' }).ToList(),
-                    DpkPath = request.DpkPath ?? request.Branch,
-                    DeploymentTemplates = request.CloudDeployments?.Values.ToList() ?? new List<string> { "Antares_StompDeploy.xml", "GeoMaster_StompDeploy.xml" },
-                    JobTypes = jobTypes
-                };
-
-                _logger.WriteRequest(requestForLogging);
+                exception = ex;
             }
 
-            if (cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Created || cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Accepted)
+            if (cxt != null && (cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Created || cxt.LastResult.HttpStatusCode == (int)HttpStatusCode.Accepted))
             {
                 return req.CreateResponse(HttpStatusCode.Accepted, new { RequestId = request.Id, Message = $"Message was queued to cloud stampy storage account with ClientRequestId: {cxt.ClientRequestID} StatusCode: {cxt.LastResult.HttpStatusCode} Queue Message Id: {cloudQueueMessage.Id}" });
             }
             else
             {
-                return req.CreateErrorResponse(HttpStatusCode.InternalServerError, (new { RequestId = request.Id, Message = $"Failed to queue request to cloud stampy storage account. ExceptionMessage: {storageException.Message}" }).ToString());                
+                return req.CreateErrorResponse(HttpStatusCode.InternalServerError, (new { RequestId = request.Id, Message = $"Failed to queue request to cloud stampy storage account. ExceptionMessage: {exception.Message}" }).ToString());                
             }
         }
 
