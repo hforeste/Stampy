@@ -87,7 +87,7 @@
     "imageName" : {
       "type": "string"
     },
-    "certPassword" : {
+    "keyVaultCertPassword":{
       "type": "securestring"
     }
   },
@@ -105,7 +105,7 @@
         "capacity": "[parameters('instanceCount')]"
       },
       "tags": {
-        "functionsStorageAccount": "[parameters('storageAccountName')]"
+        "FunctionsStorageAccount":"[parameters('storageAccountName')]"
       },
       "properties": {
         "overprovision": "false",
@@ -160,7 +160,7 @@
                   ]   
                 },    
                 "protectedSettings": {    
-                  "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Setup.ps1',' ',parameters('domainName'),' ',parameters('domainUserName'),' ',parameters('domainUserPassword'),' ',parameters('storageAccountName'),' ',parameters('storageAccountKey'),' ',parameters('kustoClientId'),' ',parameters('kustoSecret'),' ',parameters('certPassword'))]",
+                  "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Setup.ps1',' ',parameters('domainName'),' ',parameters('domainUserName'),' ',parameters('domainUserPassword'),' ',parameters('storageAccountName'),' ',parameters('storageAccountKey'),' ',parameters('kustoClientId'),' ',parameters('kustoSecret'),' ',parameters('keyVaultCertPassword'))]",
                   "storageAccountName": "[parameters('storageAccountName')]",
                   "StorageAccountKey": "[parameters('storageAccountKey')]"
                 }    
