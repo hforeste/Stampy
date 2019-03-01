@@ -90,22 +90,36 @@ namespace StampyVmssManagement
             var response = new List<JobDetail>();
             var config = new KustoConfiguration();
             IDataReader reader;
-            using (var client = new KustoClientReader(config, config.KustoDatabase))
-            {
-                reader = await client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.GetJobDetails(id));
-            }
+            var client = new KustoClientReader(config, config.KustoDatabase);
+            reader = await client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.GetRequestStatus(id));
 
             var tableResult = new DataTable();
             tableResult.Load(reader);
 
+            var requestReader = await client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.GetRequest(id));
+            var requestTable = new DataTable();
+            requestTable.Load(requestReader);
+
+            var jobDetails = new Dictionary<string, Task<IDataReader>>();
             foreach (DataRow row in tableResult.Rows)
             {
-                DateTime.TryParse(row["StartTime"].ToString(), out DateTime startTime);
-                DateTime.TryParse(row["EndTime"].ToString(), out DateTime endTime);
-                int.TryParse(row["JobDurationInMinutes"].ToString(), out int jobDurationInMinutes);
-                response.Add(new JobDetail { Id = (string)row["JobId"], Type = (string)row["JobType"], Status = (string)row["Status"], StartTime = startTime, EndTime = endTime, ExceptionType = row["ExceptionType"].ToString(), ExceptionDetails = row["ExceptionDetails"].ToString(), JobDurationInMinutes = jobDurationInMinutes, ReportUri = new Uri(row["ReportUri"].ToString()) });
+                string jobId = (string)row["JobId"];
+                jobDetails[jobId] = client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.GetJobDetails(id, jobId));
             }
 
+            foreach (DataRow row in tableResult.Rows)
+            {
+                var jobDetailsKustoReader = await jobDetails[(string)row["JobId"]];
+                var jobDetailsTable = new DataTable();
+                jobDetailsTable.Load(jobDetailsKustoReader);
+                response.Add(new JobDetail(row, jobDetailsTable, requestTable.Rows[0]));
+            }
+
+            client.Dispose();
+            foreach (var item in jobDetails)
+            {
+                (await item.Value).Dispose();
+            }
             return req.CreateResponse(HttpStatusCode.OK, response, "application/json");
         }
 

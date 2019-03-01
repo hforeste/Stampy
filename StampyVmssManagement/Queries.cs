@@ -14,7 +14,7 @@ StampyClientRequests
 | distinct TimeStamp, RequestId, User, BuildPath , DpkPath, Client , JobTypes, CloudServiceNames, DeploymentTemplatePerCloudService , TestCategories
 | order by TimeStamp desc
 ";
-        public static string GetJobDetails(string requestId)
+        public static string GetRequestStatus(string requestId)
         {
             return $@"StampyResults
 | where RequestId == ""{requestId}""
@@ -22,6 +22,18 @@ StampyClientRequests
 | summarize arg_max(TimeStamp, Status), StartTime = min(TimeStamp), EndTime = max(EndTime), ReportUri = any(ReportUri), JobDurationInMinutes = any(JobDurationMinutes), ExceptionType = any(ExceptionType), ExceptionDetails = any(ExceptionDetails) by JobId, JobType
 | order by TimeStamp asc
 | project-away TimeStamp";
+        }
+
+        public static string GetJobDetails(string requestId, string jobId)
+        {
+            return $@"StampyWorkerEvents 
+| where TimeStamp >= ago(30d) and RequestId == ""{requestId}"" and JobId == ""{jobId}""
+| order by TimeStamp asc";
+        }
+
+        public static string GetRequest(string requestId)
+        {
+            return $@"StampyClientRequests | where RequestId == ""{requestId}""";
         }
 
     }
