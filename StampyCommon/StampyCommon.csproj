@@ -109,6 +109,7 @@
     <Compile Include="Models\CloudStampyParameters.cs" />
     <Compile Include="Models\StampyResult.cs" />
     <Compile Include="Models\Status.cs" />
+    <Compile Include="Utilities\KustoClientReader.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

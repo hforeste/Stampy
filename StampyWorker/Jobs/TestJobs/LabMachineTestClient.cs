@@ -149,7 +149,6 @@ namespace StampyWorker.Jobs
 
             var testNameMapping = new Dictionary<string, string>
             {
-                { "Express", string.Empty},
                 { ":-noexpress", string.Empty},
                 { "CsmApiJune", "Api"},
                 { "Mobile", string.Empty },
