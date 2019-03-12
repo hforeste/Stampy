@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -13,6 +14,7 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using StampyCommon.Utilities;
 
 namespace StampyVmssManagement
 {
@@ -225,6 +227,27 @@ namespace StampyVmssManagement
             var operation = new ResourceCleanerOperation();
             operation.ResourceType = "ResourceGroups";
 
+            var config = new KustoConfiguration();
+            IDataReader reader;
+            using (var client = new KustoClientReader(config, config.KustoDatabase))
+            {
+                reader = await client.GetData("stampyvmssmgmt", config.KustoDatabase, Queries.GetCreatedServices());
+            }
+
+            var tableResult = new DataTable();
+            tableResult.Load(reader);
+
+            var expiredServices = new List<string>();
+            foreach (DataRow row in tableResult.Rows)
+            {
+                var timestamp = DateTime.Parse(row["TimeStamp"].ToString());
+                if ((DateTime.UtcNow - timestamp).TotalHours >= _resourceMaxLivingTimeInHours)
+                {
+                    expiredServices.Add(row["StampName"].ToString());
+                    expiredServices.Add($"{row["StampName"].ToString()}geo");
+                }
+            }
+
             using (var httpClient = new CustomHttpClient(_logger))
             {
                 var accessToken = await Utility.GetServicePrincipalAccessToken(_clientId, _clientSecret);
@@ -239,8 +262,8 @@ namespace StampyVmssManagement
                 {
                     var result = await response.Content.ReadAsStringAsync();
                     var json = JObject.Parse(result);
-                    var resourceGroupNames = json["value"].Select(i => (JObject)i).Select(i => i.Value<string>("name")).Where(s => s.StartsWith("stampy"));
-                    var resourceGroupIds = json["value"].Select(i => (JObject)i).Select(i => i.Value<string>("id")).Where(s => s.Contains("stampy-"));
+                    var resourceGroups = json["value"].Select(i => (JObject)i).Where(i => expiredServices.Contains(i.Value<string>("name")));
+                    var resourceGroupIds = resourceGroups.Select(i => i.Value<string>("id"));
                     operation.Total = resourceGroupIds.Count();
 
                     var operations = new List<string>();
