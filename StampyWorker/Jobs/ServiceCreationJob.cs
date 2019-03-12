@@ -1,15 +1,18 @@
-using StampyCommon;
+﻿using StampyCommon;
 using StampyCommon.Loggers;
 using StampyCommon.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
-using StampyCommon;
 
 namespace StampyWorker.Jobs
 {
-    internal class ServiceCreationJob : AntaresDeploymentBaseJob
+    internal class ServiceCreationJob : IJob
     {
         ICloudStampyLogger _logger;
         CloudStampyParameters _parameters;
@@ -19,7 +22,7 @@ namespace StampyWorker.Jobs
         private List<Task> _azureLogsWriterUnfinishedJobs;
         private const string LOG_FILE_NAME = "createservice.log";
 
-        protected override void PreExecute()
+        public ServiceCreationJob(ICloudStampyLogger logger, CloudStampyParameters cloudStampyArgs)
         {
             _logger = logger;
             _result = new JobResult();
@@ -43,21 +46,38 @@ namespace StampyWorker.Jobs
 
         public Task<bool> Cancel()
         {
-            var commands = new List<AntaresDeploymentTask>()
-            {
-                new AntaresDeploymentTask
-                {
-                    Name = "Create Private Stamp and Geomaster",
-                    Description = string.Empty,
-                    AntaresDeploymentExcutableParameters = $"SetupPrivateStampWithGeo {Parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /VirtualDedicated:true /bvtCapableStamp:true /DefaultLocation:\"Central US\""
-                }
-            };
-            return commands;
+            return Task.FromResult(true);
         }
 
         public async Task<JobResult> Execute()
         {
-            var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{Parameters.CloudName}\developer.definitions";
+            if (!File.Exists(AntaresDeploymentExecutablePath))
+            {
+                var ex = new FileNotFoundException("Cannot find file", Path.GetFileName(AntaresDeploymentExecutablePath));
+                _logger.WriteError(_parameters, "Cannot find file", ex);
+                throw ex;
+            }
+
+            var processStartInfo = new ProcessStartInfo();
+            processStartInfo.FileName = AntaresDeploymentExecutablePath;
+            processStartInfo.Arguments = $"SetupPrivateStampWithGeo {_parameters.CloudName} /SubscriptionId:b27cf603-5c35-4451-a33a-abba1a08c9c2 /VirtualDedicated:true /bvtCapableStamp:true /DefaultLocation:\"Central US\"";
+            processStartInfo.UseShellExecute = false;
+            processStartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            processStartInfo.RedirectStandardError = true;
+            processStartInfo.RedirectStandardOutput = true;
+
+            _logger.WriteInfo(_parameters, $"Start {processStartInfo.FileName} {processStartInfo.Arguments}");
+
+            using (var createProcess = Process.Start(processStartInfo))
+            {
+                createProcess.BeginErrorReadLine();
+                createProcess.BeginOutputReadLine();
+                createProcess.OutputDataReceived += new DataReceivedEventHandler(OutputReceived);
+                createProcess.ErrorDataReceived += new DataReceivedEventHandler(ErrorReceived);
+                createProcess.WaitForExit();
+            }
+
+            var definitionsPath = $@"\\AntaresDeployment\PublicLockBox\{_parameters.CloudName}\developer.definitions";
             var cloudStampyFirewallRules =
 @"
 <redefine name=""SqlFirewallAddressRangesList"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24;104.44.112.0/24;157.58.30.0/24"" /><redefine name=""FirewallLockdownWhitelistedSources"" value=""131.107.0.0/16;167.220.0.0/16;65.55.188.0/24;104.44.112.0/24;157.58.30.0/24"" />
@@ -146,7 +166,8 @@ namespace StampyWorker.Jobs
             }
             catch (Exception ex)
             {
-                throw new Exception("Failed to modify definitions file", ex);
+                _logger.WriteError(_parameters, "Failed to modify definitions file", ex);
+                return false;
             }
 
 
