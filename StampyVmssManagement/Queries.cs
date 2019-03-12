@@ -36,5 +36,18 @@ StampyClientRequests
             return $@"StampyClientRequests | where RequestId == ""{requestId}""";
         }
 
+        public static string GetCreatedServices()
+        {
+            return $@"StampyWorkerEvents
+| where TimeStamp >= ago(30d)
+| project TimeStamp , Message 
+| where Message startswith ""Creating a private stamp""
+| parse Message with* ""stamp "" StampName "" with"" *
+| project-away Message
+| summarize TimeStamp = max(TimeStamp) by StampName
+| order by TimeStamp asc 
+| project TimeStamp, StampName";
+        }
+
     }
 }
