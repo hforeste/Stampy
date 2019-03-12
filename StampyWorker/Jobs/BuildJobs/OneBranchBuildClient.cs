@@ -60,8 +60,7 @@ namespace StampyWorker.Jobs.BuildJobs
                 jResult = await ExecuteBuild();
                 JobStatus = jResult.JobStatus;
 
-            }
-            catch (Exception)
+            }catch(Exception)
             {
                 throw;
             }
@@ -114,7 +113,6 @@ namespace StampyWorker.Jobs.BuildJobs
             _logger.WriteInfo(_cloudStampyArgs, "Clean the working tree by recursively removing files that are not under version control, starting from the current directory.");
             int cleanActionExitCode = await ProcessInvoker.Start(cleanAction, (output, isFailures) =>
             {
-                output = $"[{DateTime.UtcNow.ToString("HH:mm:ss")}]-" + output;
                 JobStatus = Status.InProgress;
                 _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(MACHINE_LOG, output));
                 _buildLogsWritter.LogUrls.TryGetValue(MACHINE_LOG, out _reportUri);
@@ -129,7 +127,6 @@ namespace StampyWorker.Jobs.BuildJobs
             _logger.WriteInfo(_cloudStampyArgs, $"Fetch the latest changes from {_cloudStampyArgs.GitBranchName} to the local file system");
             int syncBranchExitCode = await ProcessInvoker.Start(syncBranchAction, (output, isFailure) =>
             {
-                output = $"[{DateTime.UtcNow.ToString("HH:mm:ss")}]-" + output;
                 JobStatus = Status.InProgress;
                 _buildLogsWriterUnfinishedJobs.Add(_buildLogsWritter.CreateLogIfNotExistAppendAsync(MACHINE_LOG, output));
                 _buildLogsWritter.LogUrls.TryGetValue(MACHINE_LOG, out _reportUri);

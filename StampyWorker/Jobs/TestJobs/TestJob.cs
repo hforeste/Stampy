@@ -45,9 +45,7 @@ namespace StampyWorker.Jobs
                 return jobResult;
             }
 
-            string location = _args.CloudName.EndsWith("geo") ? $@"\\antaresdeployment\PublicLockbox\{_args.CloudName}" : $@"\\antaresdeployment\PublicLockbox\{_args.CloudName}geo";
-
-            if (!TryCreateTestConfig(location))
+            if (!TryCreateTestConfig($@"\\antaresdeployment\PublicLockbox\{_args.CloudName}geo"))
             {
                 jobResult = new JobResult();
                 jobResult.JobStatus = Status.Failed;

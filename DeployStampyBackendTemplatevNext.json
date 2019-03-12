@@ -86,9 +86,6 @@
     },
     "imageName" : {
       "type": "string"
-    },
-    "keyVaultCertPassword":{
-      "type": "securestring"
     }
   },
   "variables": {
@@ -103,9 +100,6 @@
       "sku": {
         "name": "[parameters('vmSku')]",
         "capacity": "[parameters('instanceCount')]"
-      },
-      "tags": {
-        "FunctionsStorageAccount":"[parameters('storageAccountName')]"
       },
       "properties": {
         "overprovision": "false",
@@ -155,12 +149,11 @@
                   "fileUris": [
                   "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/bootstrapper.zip')]",
                   "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/CloudStampy.zip')]",
-                  "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/Setup.ps1')]",
-                  "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/KeyVaultTest2019.pfx')]"
+                  "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net/machine-setup/Setup.ps1')]"
                   ]   
                 },    
                 "protectedSettings": {    
-                  "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Setup.ps1',' ',parameters('domainName'),' ',parameters('domainUserName'),' ',parameters('domainUserPassword'),' ',parameters('storageAccountName'),' ',parameters('storageAccountKey'),' ',parameters('kustoClientId'),' ',parameters('kustoSecret'),' ',parameters('keyVaultCertPassword'))]",
+                  "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Setup.ps1',' ',parameters('domainName'),' ',parameters('domainUserName'),' ',parameters('domainUserPassword'),' ',parameters('storageAccountName'),' ',parameters('storageAccountKey'),' ',parameters('kustoClientId'),' ',parameters('kustoSecret'))]",
                   "storageAccountName": "[parameters('storageAccountName')]",
                   "StorageAccountKey": "[parameters('storageAccountKey')]"
                 }    
