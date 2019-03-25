@@ -10,6 +10,7 @@ using System.Net.Http.Headers;
 using Newtonsoft.Json;
 using System.Text;
 using System.Diagnostics;
+using Microsoft.Azure.WebJobs.Extensions.Http;
 
 namespace StampyVmssManagement
 {
@@ -29,6 +30,39 @@ namespace StampyVmssManagement
             _logger = log;
             var nDeploymentJobs = await GetNumberOfDeploymentJobs().ConfigureAwait(false);
             await ScaleStampyBackend(nDeploymentJobs);
+        }
+
+        /// <summary>
+        /// The worker code gets into this bad state where service creation and deployment code cant load a cert from the filesystem. Restarting
+        /// the worker seems to mitigate the problem.
+        /// </summary>
+        /// <param name="myTimer"></param>
+        /// <param name="log"></param>
+        /// <returns></returns>
+        [FunctionName("RestartWorkers")]
+        public static async Task RestartWorkers([TimerTrigger("0 0 7 * * *")]TimerInfo myTimer, TraceWriter log)
+        {
+            await RestartWorkersAsync(log);
+        }
+
+        public static async Task RestartWorkersAsync(TraceWriter logger = null)
+        {
+            var clientId = Environment.GetEnvironmentVariable("AAD_ClientId");
+            var clientSecret = Environment.GetEnvironmentVariable("AAD_ClientSecret");
+
+            using (var httpClient = new CustomHttpClient(logger))
+            {
+                var accessToken = await Utility.GetServicePrincipalAccessToken(clientId, clientSecret);
+                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                string resourceUri = $"https://management.azure.com/subscriptions/{SubscriptionId}/resourceGroups/{ResourceGroup}/providers/Microsoft.Compute/virtualMachineScaleSets/{VmScaleSetName}/restart?api-version=2018-06-01";
+                var request = new HttpRequestMessage(HttpMethod.Post, resourceUri);
+                var result = await httpClient.SendAsync("Restart VMSS", request);
+
+                if (!result.IsSuccessStatusCode)
+                {
+                    logger?.Error($"Failed to restart the VMSS {VmScaleSetName}");
+                }
+            }
         }
 
         /// <summary>
