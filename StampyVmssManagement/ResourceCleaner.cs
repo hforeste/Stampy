@@ -44,8 +44,7 @@ namespace StampyVmssManagement
         [FunctionName("ResourceCleanerDebug")]
         public static async void RunDebug([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "debugresourcecleaner")]HttpRequestMessage req, TraceWriter log)
         {
-            _logger = log;
-            await DeleteStorageAccounts();
+            await CapacityManager.RestartWorkersAsync(new NullableLogger());
         }
 
         public static async Task<ResourceCleanerOperation> DeleteSqlServers()
