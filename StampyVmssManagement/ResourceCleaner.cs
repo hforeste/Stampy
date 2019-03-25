@@ -46,7 +46,8 @@ namespace StampyVmssManagement
         [FunctionName("ResourceCleanerDebug")]
         public static async void RunDebug([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "debugresourcecleaner")]HttpRequestMessage req, TraceWriter log)
         {
-            await CapacityManager.RestartWorkersAsync(new NullableLogger());
+            _logger = new NullableLogger();
+            await DeleteStorageAccounts();
         }
 
         public static async Task<ResourceCleanerOperation> DeleteSqlServers()
@@ -128,7 +129,7 @@ namespace StampyVmssManagement
 
                 foreach (var resourceId in expiredStorageAccounts)
                 {
-                    response = await httpClient.SendAsync("DeleteStorageAccounts", new HttpRequestMessage(HttpMethod.Delete, $"https://management.azure.com{resourceId}?api-version=2016-04-01"));
+                    response = await httpClient.SendAsync("DeleteStorageAccounts", new HttpRequestMessage(HttpMethod.Delete, $"https://management.azure.com{resourceId}?api-version=2017-10-01"));
                     _logger.Info($"DELETE storageaccount: {resourceId.Split(new char[] { '/' }).Last()} StatusCode: {response.StatusCode}");
                     if (response.IsSuccessStatusCode)
                     {
