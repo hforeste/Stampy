@@ -10,6 +10,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using System.Xml;
 using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -40,12 +41,11 @@ namespace StampyVmssManagement
             }
         }
 
-        [Disable]
         [FunctionName("ResourceCleanerDebug")]
-        public static async void RunDebug([TimerTrigger("* */1 * * * *")]TimerInfo myTimer, TraceWriter log)
+        public static async void RunDebug([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "debugresourcecleaner")]HttpRequestMessage req, TraceWriter log)
         {
             _logger = log;
-            await DeleteResourceGroups();
+            await DeleteStorageAccounts();
         }
 
         public static async Task<ResourceCleanerOperation> DeleteSqlServers()
@@ -112,7 +112,7 @@ namespace StampyVmssManagement
             {
                 var accessToken = await Utility.GetServicePrincipalAccessToken(_clientId, _clientSecret);
                 httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                string requestUri = $"https://management.azure.com/subscriptions/{_subscription}/resourceGroups/Default-Storage-CentralUS/providers/Microsoft.ClassicStorage/storageAccounts?api-version=2016-04-01";
+                string requestUri = $"https://management.azure.com/subscriptions/{_subscription}/resourceGroups/Default-Storage-CentralUS/providers/Microsoft.Storage/storageAccounts?api-version=2017-10-01";
                 var request = new HttpRequestMessage(HttpMethod.Get, new Uri(requestUri));
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                 var response = await httpClient.SendAsync("GetStorageAccounts", request);
